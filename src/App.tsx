@@ -27,6 +27,9 @@ import NoticeModule from './components/NoticeModule';
 import SmsModule from './components/SmsModule';
 import ReportsModule from './components/ReportsModule';
 import LibraryModule from './components/LibraryModule';
+import ExamModule from './components/ExamModule';
+import HostelModule from './components/HostelModule';
+import DonationModule from './components/DonationModule';
 
 // Icon imports
 import { 
@@ -43,7 +46,10 @@ import {
   BarChart3,
   BookOpen,
   Settings,
-  Trash2
+  Trash2,
+  Home,
+  HeartHandshake,
+  Award
 } from 'lucide-react';
 
 export default function App() {
@@ -398,44 +404,38 @@ export default function App() {
 
   // Database actions: Wiping and restoring
   const handleWipeDatabase = () => {
-    if (confirm('সাবধান! আপনি কি বর্তমানের সমস্ত শিক্ষার্থী, শিক্ষক, নোটিশ, রুটিন এবং আর্থিক রেকর্ড মুছে ফেলে সম্পূর্ণ ফাঁকা বা খালি ডেটাবেজে কাজ শুরু করতে চান?\n\nএই প্রক্রিয়াটি আর ফেরানো যাবে না।')) {
-      localStorage.setItem('madrasah_students', '[]');
-      localStorage.setItem('madrasah_teachers', '[]');
-      localStorage.setItem('madrasah_attendance', '[]');
-      localStorage.setItem('madrasah_payments', '[]');
-      localStorage.setItem('madrasah_schedules', '[]');
-      localStorage.setItem('madrasah_notices', '[]');
-      localStorage.setItem('madrasah_sms_logs', '[]');
-      localStorage.setItem('madrasah_books', '[]');
-      localStorage.setItem('madrasah_borrow_records', '[]');
-      
-      setStudents([]);
-      setTeachers([]);
-      setAttendance([]);
-      setPayments([]);
-      setSchedules([]);
-      setNotices([]);
-      setSmsLogs([]);
-      
-      alert('সফলভাবে সমস্ত ডেমো ডাটা মুছে ফেলা হয়েছে এবং একটি শূন্য খাতা প্রস্তুত করা হয়েছে!');
-      window.location.reload();
-    }
+    localStorage.setItem('madrasah_students', '[]');
+    localStorage.setItem('madrasah_teachers', '[]');
+    localStorage.setItem('madrasah_attendance', '[]');
+    localStorage.setItem('madrasah_payments', '[]');
+    localStorage.setItem('madrasah_schedules', '[]');
+    localStorage.setItem('madrasah_notices', '[]');
+    localStorage.setItem('madrasah_sms_logs', '[]');
+    localStorage.setItem('madrasah_books', '[]');
+    localStorage.setItem('madrasah_borrow_records', '[]');
+    
+    setStudents([]);
+    setTeachers([]);
+    setAttendance([]);
+    setPayments([]);
+    setSchedules([]);
+    setNotices([]);
+    setSmsLogs([]);
+    
+    window.location.reload();
   };
 
   const handleRestoreDemoDatabase = () => {
-    if (confirm('আপনি কি পূর্বনির্ধারিত ডেমো ডাটা পুনরায় লোড করতে চান?')) {
-      localStorage.removeItem('madrasah_students');
-      localStorage.removeItem('madrasah_teachers');
-      localStorage.removeItem('madrasah_attendance');
-      localStorage.removeItem('madrasah_payments');
-      localStorage.removeItem('madrasah_schedules');
-      localStorage.removeItem('madrasah_notices');
-      localStorage.removeItem('madrasah_sms_logs');
-      localStorage.removeItem('madrasah_books');
-      localStorage.removeItem('madrasah_borrow_records');
-      alert('ডেমো ডাটা সফলভাবে পুনরুদ্ধার করা হয়েছে!');
-      window.location.reload();
-    }
+    localStorage.removeItem('madrasah_students');
+    localStorage.removeItem('madrasah_teachers');
+    localStorage.removeItem('madrasah_attendance');
+    localStorage.removeItem('madrasah_payments');
+    localStorage.removeItem('madrasah_schedules');
+    localStorage.removeItem('madrasah_notices');
+    localStorage.removeItem('madrasah_sms_logs');
+    localStorage.removeItem('madrasah_books');
+    localStorage.removeItem('madrasah_borrow_records');
+    window.location.reload();
   };
 
   // 6. Public Notices
@@ -574,6 +574,22 @@ export default function App() {
             teachers={teachers}
           />
         );
+      case 'exams':
+        return (
+          <ExamModule 
+            students={students}
+          />
+        );
+      case 'hostel':
+        return (
+          <HostelModule 
+            students={students}
+          />
+        );
+      case 'donations':
+        return (
+          <DonationModule />
+        );
       default:
         return <div className="text-center py-10">অনুপলব্ধ বিভাগ!</div>;
     }
@@ -590,6 +606,9 @@ export default function App() {
     { key: 'notices', label: 'বিজ্ঞপ্তি বোর্ড', icon: Megaphone },
     { key: 'sms', label: 'এসএমএস পোর্টাল', icon: MessageSquare },
     { key: 'library', label: 'লাইব্রেরি ও কুতুবখানা', icon: BookOpen },
+    { key: 'exams', label: 'পরীক্ষা ও ফলাফল', icon: Award },
+    { key: 'hostel', label: 'আবাসিক হোস্টেল ও ডাইনিং', icon: Home },
+    { key: 'donations', label: 'দান-সদকা ও লিল্লাহ তহবিল', icon: HeartHandshake },
     { key: 'reports', label: 'রিপোর্ট ও বিশ্লেষণ', icon: BarChart3 }
   ];
 

@@ -110,3 +110,46 @@ export interface BorrowRecord {
   status: 'borrowed' | 'returned' | 'overdue';
 }
 
+export interface ExamMark {
+  id: string;
+  studentId: string;
+  studentName: string;
+  roll: number;
+  gradeClass: MadrasahClass;
+  examType: 'ত্রৈমাসিক' | 'ষাণ্মাসিক' | 'বার্ষিক';
+  quranMarks: number;
+  hadithMarks: number;
+  arabicMarks: number;
+  banglaMarks: number;
+  mathMarks: number;
+  totalMarks: number;
+  grade: string;
+}
+
+export interface HostelRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  gradeClass: MadrasahClass;
+  roomNo: string;
+  bedNo: string;
+  mealStatus: {
+    breakfast: boolean;
+    lunch: boolean;
+    dinner: boolean;
+  };
+  lastMealUpdate: string;
+}
+
+export interface DonationRecord {
+  id: string;
+  donorName: string;
+  phone: string;
+  amount: number;
+  fundType: 'লিল্লাহ ফান্ড' | 'সদকা ও যাকাত' | 'নির্মাণ তহবিল' | 'সাধারণ ফান্ড';
+  date: string;
+  receiptNo: string;
+  paymentMethod: 'নগদ (Cash)' | 'বিকাশ (bKash)' | 'ব্যাংক (Bank)';
+}
+
+

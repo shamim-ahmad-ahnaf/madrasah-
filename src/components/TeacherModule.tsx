@@ -236,9 +236,7 @@ export default function TeacherModule({
                 </button>
                 <button 
                   onClick={() => {
-                    if (confirm(`আপনি কি নিশ্চিতভাবে "${teacher.name}" এর ডাটা ডিলিট করতে চান?`)) {
-                      onDeleteTeacher(teacher.id);
-                    }
+                    onDeleteTeacher(teacher.id);
                   }}
                   className="p-1.5 px-3 rounded-lg border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-650 text-red-600 hover:text-red-700 transition-colors text-xs flex items-center space-x-1 font-medium cursor-pointer"
                 >

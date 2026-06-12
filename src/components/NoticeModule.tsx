@@ -189,9 +189,7 @@ export default function NoticeModule({
                     </button>
                     <button 
                       onClick={() => {
-                        if (confirm('আপনি কি এই নোটিশটি মুছতে চান?')) {
-                          onDeleteNotice(notice.id);
-                        }
+                        onDeleteNotice(notice.id);
                       }}
                       className="p-1 px-2.5 rounded-lg border border-slate-150 hover:border-red-300 hover:bg-red-50 text-slate-600 hover:text-red-700 transition-colors text-xs flex items-center space-x-1"
                     >

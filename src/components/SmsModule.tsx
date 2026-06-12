@@ -329,10 +329,8 @@ export default function SmsModule({
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => {
-                    if (confirm('আপনি কি পূর্ববর্তী সমস্ত এসএমএস লগ মুছে ফেলতে চান?')) {
-                      onClearSmsLogs();
-                      setSelectedReceiptLog(null);
-                    }
+                    onClearSmsLogs();
+                    setSelectedReceiptLog(null);
                   }}
                   className="text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100/60 p-1.5 px-2.5 rounded-lg text-[10px] font-bold transition-all flex items-center space-x-1"
                 >

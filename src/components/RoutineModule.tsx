@@ -182,9 +182,7 @@ export default function RoutineModule({
                           <button 
                             type="button"
                             onClick={() => {
-                              if (confirm('আপনি কি এই রুটিন পিরিয়ড বাতিল করতে চান?')) {
-                                onDeleteSchedule(schedule.id);
-                              }
+                              onDeleteSchedule(schedule.id);
                             }}
                             className="bg-red-50 hover:bg-red-100 text-red-600 p-1.5 rounded-lg transition-colors border border-red-100"
                             title="মুছে ফেলুন"

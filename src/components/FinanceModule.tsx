@@ -226,9 +226,7 @@ export default function FinanceModule({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm('আপনি কি এই রিসিট/রশিদ কপিটি বাতিল ও ডিলিট করতে চান?')) {
-                              onDeletePayment(payment.id);
-                            }
+                            onDeletePayment(payment.id);
                           }}
                           className="p-1 px-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-650 text-red-600 transition-colors"
                           title="রশিদ মুছুন"

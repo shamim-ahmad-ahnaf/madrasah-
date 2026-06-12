@@ -280,31 +280,27 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
       return;
     }
 
-    if (window.confirm('আপনি কি নিশ্চিত যে এই কিতাবটি লাইব্রেরি ক্যাটালগ থেকে চিরতরে মুছে ফেলতে চান?')) {
-      const updated = books.filter(b => b.id !== bookId);
-      saveBooks(updated);
-      showNotification('কিতাব ক্যাটালগ হতে সফলভাবে অপসারিত হয়েছে।');
-    }
+    const updated = books.filter(b => b.id !== bookId);
+    saveBooks(updated);
+    showNotification('কিতাব ক্যাটালগ হতে সফলভাবে অপসারিত হয়েছে।');
   };
 
   // Delete Borrow Entry
   const handleDeleteBorrowLog = (borrowId: string) => {
-    if (window.confirm('আপনি কি এই বই বিতরণের রেকর্ডটি মুছে ফেলতে চান?')) {
-      const target = borrows.find(b => b.id === borrowId);
-      if (target && target.status !== 'returned') {
-        // Return available copy first
-        const updatedBooks = books.map(b => {
-          if (b.id === target.bookId) {
-            return { ...b, availableCopies: Math.min(b.totalCopies, b.availableCopies + 1) };
-          }
-          return b;
-        });
-        saveBooks(updatedBooks);
-      }
-      const updated = borrows.filter(b => b.id !== borrowId);
-      saveBorrows(updated);
-      showNotification('বই বিতরণের ইতিহাস সফলভাবে মুছে ফেলা হয়েছে।');
+    const target = borrows.find(b => b.id === borrowId);
+    if (target && target.status !== 'returned') {
+      // Return available copy first
+      const updatedBooks = books.map(b => {
+        if (b.id === target.bookId) {
+          return { ...b, availableCopies: Math.min(b.totalCopies, b.availableCopies + 1) };
+        }
+        return b;
+      });
+      saveBooks(updatedBooks);
     }
+    const updated = borrows.filter(b => b.id !== borrowId);
+    saveBorrows(updated);
+    showNotification('বই বিতরণের ইতিহাস সফলভাবে মুছে ফেলা হয়েছে।');
   };
 
   // Statistics Computations
