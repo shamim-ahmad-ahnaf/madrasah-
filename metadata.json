@@ -1,0 +1,6 @@
+{
+  "name": "Madrasah Management System",
+  "description": "একটি আধুনিক ও সম্পূর্ণ মাদ্রাসা ব্যবস্থাপনা সিস্টেম (Madrasah Management System)। ছাত্র, শিক্ষক, হাজিরা, বেতন ও শ্রেণী রুটিন ব্যবস্থাপনার জন্য ওয়ান-স্টপ সমাধান।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
