@@ -122,7 +122,7 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
   const handleAddBook = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBookTitle.trim() || !newBookAuthor.trim()) {
-      alert('দয়া করে বইয়ের নাম ও লেখকের নাম পূরণ করুন।');
+      showNotification('দয়া করে বইয়ের নাম ও লেখকের নাম পূরণ করুন।');
       return;
     }
 
@@ -178,24 +178,24 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
     e.preventDefault();
     
     if (!borrowBookId) {
-      alert('দয়া করে একটি কিতাব নির্বাচন করুন।');
+      showNotification('দয়া করে একটি কিতাব নির্বাচন করুন।');
       return;
     }
 
     if (!customBorrowerName.trim()) {
-      alert('দয়া করে কোনো গ্রহীতা নির্বাচন বা নাম লিখুন।');
+      showNotification('দয়া করে কোনো গ্রহীতা নির্বাচন বা নাম লিখুন।');
       return;
     }
 
     // Check available copies first
     const targetBook = books.find(b => b.id === borrowBookId);
     if (!targetBook) {
-      alert('কিতাবটি পাওয়া যায়নি।');
+      showNotification('কিতাবটি পাওয়া যায়নি।');
       return;
     }
 
     if (targetBook.availableCopies <= 0) {
-      alert('দুঃখিত! এই কিতাবের কোনো কপি এখন লাইব্রেরিতে খালি নেই।');
+      showNotification('দুঃখিত! এই কিতাবের কোনো কপি এখন লাইব্রেরিতে খালি নেই।');
       return;
     }
 
@@ -276,7 +276,7 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
   const handleDeleteBook = (bookId: string) => {
     const hasActiveBorrows = borrows.some(b => b.bookId === bookId && b.status !== 'returned');
     if (hasActiveBorrows) {
-      alert('সতর্কতা! এই কিতাবটি বর্তমানে কারও নিকট ধার দেওয়া আছে। ফেরত নেওয়ার আগে এটি মুছে ফেলা যাবে না।');
+      showNotification('সতর্কতা! এই কিতাবটি বর্তমানে কারও নিকট ধার দেওয়া আছে। ফেরত নেওয়ার আগে এটি মুছে ফেলা যাবে না।');
       return;
     }
 

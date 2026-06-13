@@ -30,6 +30,7 @@ import LibraryModule from './components/LibraryModule';
 import ExamModule from './components/ExamModule';
 import HostelModule from './components/HostelModule';
 import DonationModule from './components/DonationModule';
+import StoreInventoryModule from './components/StoreInventoryModule';
 
 // Icon imports
 import { 
@@ -49,7 +50,11 @@ import {
   Trash2,
   Home,
   HeartHandshake,
-  Award
+  Award,
+  Boxes,
+  Smartphone,
+  Plus,
+  Download
 } from 'lucide-react';
 
 export default function App() {
@@ -107,6 +112,31 @@ export default function App() {
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
+
+  // PWA & Home Screen shortcut state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
+  const [isSuccessfullyInstalled, setIsSuccessfullyInstalled] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsSuccessfullyInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
 
   // Initial load effect
   useEffect(() => {
@@ -350,10 +380,10 @@ export default function App() {
   };
 
   // 4. Payments Finance Book
-  const handleAddPayment = (paymentData: Omit<FeePayment, 'id'>, sendSMS: boolean) => {
+  const handleAddPayment = (paymentData: Omit<FeePayment, 'id'> & { id?: string }, sendSMS: boolean) => {
     const newPayment: FeePayment = {
       ...paymentData,
-      id: 'py-' + Math.random().toString(36).substr(2, 9)
+      id: paymentData.id || ('py-' + Math.random().toString(36).substr(2, 9))
     };
     saveAndSetPayments([newPayment, ...payments]);
 
@@ -590,6 +620,10 @@ export default function App() {
         return (
           <DonationModule />
         );
+      case 'store_inventory':
+        return (
+          <StoreInventoryModule />
+        );
       default:
         return <div className="text-center py-10">অনুপলব্ধ বিভাগ!</div>;
     }
@@ -601,7 +635,7 @@ export default function App() {
     { key: 'students', label: 'শিক্ষার্থী তালিকা', icon: Users },
     { key: 'teachers', label: 'উস্তাদ / শিক্ষকগণ', icon: GraduationCap },
     { key: 'attendance', label: 'হাজিরা খাতা', icon: CalendarCheck },
-    { key: 'finance', label: 'বেতন ও ফি সংগ্রহ', icon: DollarSign },
+    { key: 'finance', label: 'আয়-ব্যয় ও ফি হিসাব', icon: DollarSign },
     { key: 'routines', label: 'শ্রেণী রুটিন', icon: Clock },
     { key: 'notices', label: 'বিজ্ঞপ্তি বোর্ড', icon: Megaphone },
     { key: 'sms', label: 'এসএমএস পোর্টাল', icon: MessageSquare },
@@ -609,6 +643,7 @@ export default function App() {
     { key: 'exams', label: 'পরীক্ষা ও ফলাফল', icon: Award },
     { key: 'hostel', label: 'আবাসিক হোস্টেল ও ডাইনিং', icon: Home },
     { key: 'donations', label: 'দান-সদকা ও লিল্লাহ তহবিল', icon: HeartHandshake },
+    { key: 'store_inventory', label: 'স্টোর ও ডাইনিং ইনভেন্টরি', icon: Boxes },
     { key: 'reports', label: 'রিপোর্ট ও বিশ্লেষণ', icon: BarChart3 }
   ];
 
@@ -677,7 +712,24 @@ export default function App() {
         </nav>
 
         {/* Footer profile & server state details */}
-        <div className="p-4 border-t border-emerald-800/50 space-y-3">
+        <div className="p-4 border-t border-emerald-800/50 space-y-2.5">
+          {/* Add to Home Screen shortcut banner with Dynamic Logo */}
+          <button
+            onClick={() => setIsShortcutModalOpen(true)}
+            className="w-full flex items-center space-x-2.5 bg-gradient-to-r from-amber-500/15 via-emerald-800/20 to-emerald-800/40 hover:from-amber-500/25 hover:to-emerald-800/50 text-white rounded-xl p-2.5 border border-amber-500/30 transition-all text-left cursor-pointer group shadow-sm hover:shadow-md"
+            title="হোম স্ক্রিনে লোগো সহ অ্যাপ যুক্ত করুন"
+          >
+            <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-amber-400/50 flex items-center justify-center shrink-0 shadow-inner overflow-hidden">
+               <img src="/public/logo.svg" className="w-6 h-6 object-contain" alt="logo" referrerPolicy="no-referrer" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-[10px] font-extrabold text-amber-300 group-hover:text-amber-200 transition-colors leading-tight flex items-center gap-1">
+                হোম স্ক্রিনে শর্টকাট <Plus size={10} strokeWidth={3} className="text-amber-300 animate-pulse" />
+              </p>
+              <p className="text-[8px] text-emerald-200/85 mt-0.5 leading-none font-medium truncate">সুন্দর লোগো সহ ইনস্টল ট্র্যাকার</p>
+            </div>
+          </button>
+
           <div className="flex items-center space-x-2 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-800/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <span className="text-[9px] font-medium text-emerald-250">সিস্টেম অনলাইন (লোকাল স্টোরেজ)</span>
@@ -776,7 +828,28 @@ export default function App() {
               })}
             </nav>
           </div>
-          <div className="pt-4 border-t border-emerald-800/40 text-[10px] text-emerald-300 text-center">
+
+          <div className="px-3 py-1">
+            <button
+              onClick={() => {
+                setIsShortcutModalOpen(true);
+                setIsMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 bg-gradient-to-r from-amber-500/20 via-emerald-850 to-emerald-800/50 hover:from-amber-500/30 text-white rounded-xl p-3 border border-amber-500/30 transition-all text-left cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-amber-400/50 flex items-center justify-center shrink-0">
+                <img src="/public/logo.svg" className="w-6 h-6" alt="logo" referrerPolicy="no-referrer" />
+              </div>
+              <div className="overflow-hidden">
+                <p className="text-xs font-bold text-amber-300 flex items-center gap-1.5 select-none text-[11px] !leading-normal">
+                  আজই হোম স্ক্রিনে যোগ করুন <Plus size={11} className="text-amber-300 shrink-0" />
+                </p>
+                <p className="text-[9px] text-emerald-250 mt-0.5 leading-none font-medium text-[9px]">সুন্দর ও ঐতিহ্যবাহী লোগো সহ অ্যাপ</p>
+              </div>
+            </button>
+          </div>
+
+          <div className="pt-4 border-t border-emerald-800/40 text-[10px] text-emerald-300 text-center select-none font-sans">
             {madrasahName} • সংস্করণ ৪.৩.০
           </div>
         </div>
@@ -1131,6 +1204,205 @@ export default function App() {
               <button
                 onClick={() => setIsSettingsModalOpen(false)}
                 className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-2 px-6 rounded-xl text-xs transition-all shadow-sm cursor-pointer"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* PWA Home Screen Shortcut Modal WITH Premium Logo Preview & SmartMockup */}
+      {isShortcutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="shortcut-helper-modal">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-150 w-full max-w-lg overflow-hidden flex flex-col md:max-h-[92vh] max-h-[95vh] animate-scale-up">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-teal-950 text-white p-4 flex items-center justify-between shrink-0 border-b border-emerald-800/40">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-800 flex items-center justify-center border border-amber-400/40 animate-pulse">
+                  <Smartphone size={15} className="text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm font-sans tracking-wide">নতুন লোগো সহ হোম স্ক্রিনে যোগ করুন</h3>
+                  <p className="text-[9px] text-emerald-300 leading-none mt-0.5 font-sans">মাদ্রাসা অ্যাপটি মোবাইল স্ক্রিনে সেট করুন</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsShortcutModalOpen(false)}
+                className="text-white/80 hover:text-white bg-emerald-800 hover:bg-emerald-700 p-1 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-5 text-slate-700 text-xs font-sans leading-relaxed">
+              
+              {/* Main Premium Announcement with Circular Logo */}
+              <div className="bg-gradient-to-br from-emerald-50 to-amber-50/40 border border-emerald-150 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left shadow-2xs">
+                
+                {/* Embedded Premium Logo */}
+                <div className="relative group shrink-0">
+                  <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-400 to-emerald-600 rounded-full blur-sm opacity-60 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
+                  <div className="relative w-16 h-16 rounded-full bg-emerald-950 border-2 border-amber-400 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+                    <img src="/public/logo.svg" className="w-13 h-13 object-contain" alt="মাদ্রাসা লোগো" referrerPolicy="no-referrer" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h4 className="font-extrabold text-slate-800 text-sm">দারুল উলুম মাদ্রাসা আইকন ও লোগো</h4>
+                  <p className="text-slate-600 leading-normal text-[11px] font-sans">
+                    আমাদের এই অ্যাপ্লিকেশনে একটি অত্যন্ত রমনীয় ও ঐতিহ্যবাহী সবুজ-সোনালী মার্জিত ইসলামী লোগো (খিলান গম্বুজ, কুরআনের রেহাল ও গাইড) যুক্ত করা হয়েছে। এটি শর্টকাট হিসেবে আপনার মোবাইল স্ক্রিনে দারুণ দেখাবে!
+                  </p>
+                </div>
+              </div>
+
+              {/* Interactive Phone Homescreen Mockup Visualizer */}
+              <div className="border border-slate-150 rounded-2xl bg-slate-50 p-4">
+                <span className="text-[10px] font-extrabold text-slate-450 tracking-wider uppercase block text-center mb-3">
+                  মোবাইল স্ক্রিনে শর্টকাটটির রূপরেখা (পদ্ধতিগত ডেমো)
+                </span>
+                
+                <div className="flex justify-center">
+                  {/* Smartphone Container */}
+                  <div className="w-52 h-64 rounded-[32px] border-4 border-slate-800 bg-slate-900 overflow-hidden relative shadow-md flex flex-col justify-between p-3 select-none">
+                    
+                    {/* Phone Top Speaker/Camera notch */}
+                    <div className="absolute top-1 left-1/2 -translate-x-1/2 w-16 h-3.5 bg-slate-800 rounded-full z-10 flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900 border border-slate-700"></div>
+                    </div>
+
+                    {/* Phone Home Top Panel */}
+                    <div className="flex justify-between items-center text-[7px] text-white/90 px-2 pt-0.5 font-mono font-bold">
+                      <span>১০:৩০</span>
+                      <div className="flex items-center space-x-1">
+                        <span>📶</span>
+                        <span>🔋 ৯৮%</span>
+                      </div>
+                    </div>
+
+                    {/* Smartphone Home Screen Desktop Apps Grid */}
+                    <div className="grid grid-cols-3 gap-y-3 gap-x-1 py-3 px-1 max-w-full overflow-hidden shrink-0 text-center text-[7px] text-white/90 font-medium">
+                      
+                      {/* System App 1 */}
+                      <div className="flex flex-col items-center space-y-0.5">
+                        <div className="w-7 h-7 rounded-xl bg-blue-500 flex items-center justify-center text-xs shadow-sm">📞</div>
+                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">ফোন</span>
+                      </div>
+
+                      {/* System App 2 */}
+                      <div className="flex flex-col items-center space-y-0.5">
+                        <div className="w-7 h-7 rounded-xl bg-orange-500 flex items-center justify-center text-xs shadow-sm">✉️</div>
+                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">মেসেজ</span>
+                      </div>
+
+                      {/* System App 3 */}
+                      <div className="flex flex-col items-center space-y-0.5">
+                        <div className="w-7 h-7 rounded-xl bg-sky-500 flex items-center justify-center text-xs shadow-sm">📷</div>
+                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">ক্যামেরা</span>
+                      </div>
+
+                      {/* OUR MADRASAH PWA COMPONENT */}
+                      <div className="flex flex-col items-center space-y-0.5 relative col-span-3 py-1 bg-white/10 rounded-2xl border border-amber-400/30 shadow-xs animate-pulse">
+                        <div className="absolute -top-1 -right-0.5 bg-red-600 text-white font-bold text-[7px] rounded-full w-4 h-4 flex items-center justify-center shadow-md animate-bounce">১</div>
+                        
+                        {/* Real SVG Logo Thumbnail */}
+                        <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-amber-400 flex items-center justify-center shadow-lg pointer-events-none shrink-0 overflow-hidden">
+                          <img src="/public/logo.svg" className="w-6 h-6 object-contain" alt="M" referrerPolicy="no-referrer" />
+                        </div>
+                        <span className="font-extrabold text-[8px] text-amber-300 drop-shadow-md truncate max-w-[90px] leading-tight block">দারুল উলুম মাদ্রাসা</span>
+                        <div className="text-[6px] bg-emerald-600/95 text-white px-1 py-0.2 rounded-full font-bold">হোম শর্টকাট</div>
+                      </div>
+
+                    </div>
+
+                    {/* Phone Desktop Dock area */}
+                    <div className="bg-white/20 backdrop-blur-md rounded-2xl p-1 grid grid-cols-3 gap-1 text-center shrink-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-650 flex items-center justify-center mx-auto shadow-inner text-[10px]">💬</div>
+                      <div className="w-7 h-7 rounded-lg bg-red-500 flex items-center justify-center mx-auto shadow-inner text-[10px]">🗺️</div>
+                      <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center mx-auto shadow-inner text-[10px]">🧭</div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+
+              {/* Action trigger: Dynamic installation or helper instructions */}
+              {deferredPrompt ? (
+                <div className="bg-emerald-50 border border-emerald-250 p-4 rounded-xl text-center space-y-2 shrink-0">
+                  <h5 className="font-extrabold text-emerald-900 text-sm">সরাসরি যুক্ত করার অপশন উপলব্ধ!</h5>
+                  <p className="text-[11px] text-emerald-800">আপনার ডিভাইসটি সরাসরি শর্টকাট ইনস্টল করার সুবিধা সমর্থন করে। নিচের বোতামে চাপ দিন:</p>
+                  
+                  <button
+                    onClick={async () => {
+                      if (deferredPrompt) {
+                        deferredPrompt.prompt();
+                        const { outcome } = await deferredPrompt.userChoice;
+                        if (outcome === 'accepted') {
+                          setIsSuccessfullyInstalled(true);
+                          setDeferredPrompt(null);
+                        }
+                      }
+                    }}
+                    className="w-full sm:w-auto bg-emerald-650 hover:bg-emerald-700 text-white font-extrabold px-6 py-2.5 rounded-xl border border-emerald-600 shadow-md transition-all flex items-center justify-center space-x-2 mx-auto cursor-pointer animate-bounce text-xs"
+                  >
+                    <Download size={13} className="text-white shrink-0 animate-pulse" />
+                    <span>আমার হোম স্ক্রিনে লোগো সহ যুক্ত করুন</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Detailed Step-by-Step Instructions Tabs */}
+                  <div className="bg-emerald-50/40 border border-emerald-150 rounded-2xl p-4">
+                    <h5 className="font-extrabold text-slate-800 text-xs mb-3 text-center border-b pb-2 border-emerald-100">ইনস্টল করার সহজ নির্দেশনাবলী:</h5>
+
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="bg-white/95 border border-emerald-200/50 p-3 rounded-2xl text-center space-y-1">
+                        <span className="font-extrabold text-[11px] text-emerald-800 flex items-center justify-center gap-1 leading-none select-none">
+                          🤖 অ্যান্ড্রয়েড (Chrome)
+                        </span>
+                        <div className="text-[10px] text-slate-550 pt-1 text-left space-y-1.5 leading-normal">
+                          <p><b className="text-emerald-700 font-mono">১.</b> উপরে ডান কোণার <b>তিনটি ডট (⋮)</b> অপশনে ট্যাপ করুন।</p>
+                          <p><b className="text-emerald-700 font-mono">২.</b> <b>"Add to Home screen"</b> বা <b>"ইনস্টল করুন"</b> লেখাতে দিন।</p>
+                          <p><b className="text-emerald-700 font-mono">৩.</b> মাদ্রাসা লোগো সহ শর্টকাটটি স্ক্রিনে যুক্ত হবে!</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white/95 border border-emerald-200/50 p-3 rounded-2xl text-center space-y-1">
+                        <span className="font-extrabold text-[11px] text-emerald-800 flex items-center justify-center gap-1 leading-none select-none">
+                          🍎 আইফোন (Safari)
+                        </span>
+                        <div className="text-[10px] text-slate-550 pt-1 text-left space-y-1.5 leading-normal">
+                          <p><b className="text-emerald-700 font-mono">১.</b> নিচে থাকা <b>শেয়ার (Share)</b> আইকনে চাপ দিন।</p>
+                          <p><b className="text-emerald-700 font-mono">২.</b> একটু স্ক্রল করে <b>"Add to Home Screen"</b> লেখাটি ট্যাপ করুন।</p>
+                          <p><b className="text-emerald-700 font-mono">৩.</b> উপরে ডান কোণার <b>"Add"</b> দিলে লোগো সহ সেট হবে!</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <p className="text-[9.5px] text-slate-400 text-center leading-normal mt-3 font-sans">
+                      নোট: যেকোনো ব্রাউজার থেকেই এই শর্টকাট হোম স্ক্রিনে সেট করলে কোনো ইন্টারনেট লোডিং ছাড়াই মূল অ্যাপের মত দ্রুত ব্যবহার করতে পারবেন।
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isSuccessfullyInstalled && (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center font-bold text-emerald-800 animate-pulse text-[10px]">
+                  ✓ অভিনন্দন! শর্টকাট ইনস্টলেশন প্রক্রিয়া সফল হয়েছে এবং আপনার হোম স্ক্রিনে মাদ্রাসা লোগোটি যুক্ত হয়েছে।
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+              <span className="text-[9px] text-slate-400 font-bold font-sans">সংস্করণ ৪.৩.০ • দারুল উলুম মাদ্রাসা</span>
+              <button
+                onClick={() => setIsShortcutModalOpen(false)}
+                className="bg-emerald-800 hover:bg-emerald-950 text-white font-bold py-2 px-6 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
               >
                 বন্ধ করুন
               </button>

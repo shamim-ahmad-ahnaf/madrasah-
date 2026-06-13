@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student, MadrasahClass } from '../types';
-import { User, Search, Plus, Edit, Trash2, Phone, MapPin, Calendar, Clock, CreditCard, X, BookOpen, Check } from 'lucide-react';
+import { User, Search, Plus, Edit, Trash2, Phone, MapPin, Calendar, Clock, CreditCard, X, BookOpen, Check, Printer, QrCode, ShieldCheck } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface StudentModuleProps {
   students: Student[];
@@ -26,6 +27,15 @@ export default function StudentModule({
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [selectedIdCardStudent, setSelectedIdCardStudent] = useState<Student | null>(null);
+  const [idCardTheme, setIdCardTheme] = useState<'emerald' | 'indigo' | 'slate' | 'amber'>('emerald');
+
+  // Dynamic profile settings from settings master
+  const madrasahName = (localStorage.getItem('madrasah_profile_name') || 'মারকাযুল কুরআন মাদরাসা').replace('ঐতিহ্যবাহী', '').trim();
+  const madrasahSlogan = localStorage.getItem('madrasah_profile_slogan') || 'মিরপুর, ঢাকা • প্রতিষ্ঠিত ২০০২ ইং';
+  const madrasahLogoIcon = localStorage.getItem('madrasah_profile_emoji') || '🕌';
+  const madrasahLogoText = localStorage.getItem('madrasah_profile_initial') || 'م';
+  const madrasahLogoStyle = localStorage.getItem('madrasah_profile_logo_type') || 'emblem';
 
   // Form states
   const [formName, setFormName] = useState('');
@@ -309,10 +319,17 @@ export default function StudentModule({
               </div>
 
               {/* Action operations */}
-              <div className="pt-4 mt-4 border-t border-slate-50 flex items-center justify-end space-x-2">
+              <div className="pt-4 mt-4 border-t border-slate-50 flex items-center justify-end gap-1.5 flex-wrap shrink-0">
+                <button 
+                  onClick={() => setSelectedIdCardStudent(student)}
+                  className="p-1 px-2.5 rounded-lg border border-indigo-100 bg-indigo-50/25 hover:bg-indigo-50 text-indigo-700 transition-colors text-xs flex items-center space-x-1 cursor-pointer"
+                >
+                  <CreditCard size={12} />
+                  <span>আইডি কার্ড</span>
+                </button>
                 <button 
                   onClick={() => openEditModal(student)}
-                  className="p-1 px-2.5 rounded-lg border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-800 transition-colors text-xs flex items-center space-x-1"
+                  className="p-1 px-2.5 rounded-lg border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-800 transition-colors text-xs flex items-center space-x-1 cursor-pointer"
                 >
                   <Edit size={12} />
                   <span>সম্পাদনা</span>
@@ -321,7 +338,7 @@ export default function StudentModule({
                   onClick={() => {
                     onDeleteStudent(student.id);
                   }}
-                  className="p-1.5 px-3 rounded-lg border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-650 text-red-600 hover:text-red-700 transition-colors text-xs flex items-center space-x-1 font-medium cursor-pointer"
+                  className="p-1.5 px-3 rounded-lg border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors text-xs flex items-center space-x-1 font-medium cursor-pointer"
                 >
                   <Trash2 size={12} />
                   <span>মুছে ফেলুন</span>
@@ -495,6 +512,266 @@ export default function StudentModule({
 
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Student ID Card Showcase Modal */}
+      {selectedIdCardStudent && (
+        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl border border-slate-200 w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-850"
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50 shrink-0">
+              <div className="flex items-center space-x-2">
+                <CreditCard size={18} className="text-indigo-600" />
+                <h3 className="text-sm font-black text-slate-850 font-sans">শিক্ষার্থী পরিচয়পত্র (ডিজিটাল আইডি কার্ড)</h3>
+              </div>
+              <button 
+                onClick={() => setSelectedIdCardStudent(null)}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              
+              {/* Theme Selector */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-100/50 rounded-2xl border border-slate-200/50">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">কার্ডের থিম নির্বাচন:</span>
+                <div className="flex space-x-2">
+                  {[
+                    { id: 'emerald', label: 'সবুজ', bg: 'bg-emerald-600' },
+                    { id: 'indigo', label: 'নীল', bg: 'bg-indigo-600' },
+                    { id: 'slate', label: 'কয়লা', bg: 'bg-slate-705 bg-slate-700' },
+                    { id: 'amber', label: 'সোনালী', bg: 'bg-amber-600' }
+                  ].map((themeOpt) => (
+                    <button
+                      key={themeOpt.id}
+                      onClick={() => setIdCardTheme(themeOpt.id as any)}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                        idCardTheme === themeOpt.id 
+                          ? 'bg-slate-800 text-white shadow-xs' 
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${themeOpt.bg}`}></span>
+                      {themeOpt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ID Card Front and Back Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-xl mx-auto py-2">
+                
+                {/* CARD FRONT SIDE */}
+                <div 
+                  id="id-card-front" 
+                  className={`w-full aspect-[2.6/4] max-w-[280px] mx-auto rounded-2xl border-2 shadow-lg overflow-hidden flex flex-col relative select-none bg-white ${
+                    idCardTheme === 'emerald' ? 'border-emerald-600' :
+                    idCardTheme === 'indigo' ? 'border-indigo-600' :
+                    idCardTheme === 'slate' ? 'border-slate-700' :
+                    'border-amber-600'
+                  }`}
+                >
+                  {/* Card Front Top Overlay Header */}
+                  <div className={`p-4 pt-5 text-center text-white relative shrink-0 ${
+                    idCardTheme === 'emerald' ? 'bg-emerald-800' :
+                    idCardTheme === 'indigo' ? 'bg-indigo-800' :
+                    idCardTheme === 'slate' ? 'bg-slate-800' :
+                    'bg-amber-800'
+                  }`}>
+                    {/* Tiny watermark curves */}
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+                    
+                    {/* Madrasah Branding */}
+                    <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                      {madrasahLogoStyle === 'emblem' ? (
+                        <span className="w-5 h-5 rounded-md bg-white/20 border border-white/20 flex items-center justify-center font-bold text-[9px] font-serif shrink-0">
+                          {madrasahLogoText}
+                        </span>
+                      ) : (
+                        <span className="text-sm shrink-0">{madrasahLogoIcon}</span>
+                      )}
+                      <h4 className="text-[10px] font-extrabold tracking-tight truncate leading-none uppercase">{madrasahName}</h4>
+                    </div>
+                    <p className="text-[7px] text-white/75 font-semibold tracking-widest leading-none">ছাত্র পরিচয়পত্র • STUDENT CARD</p>
+                  </div>
+
+                  {/* Top design Accent Wave Bar */}
+                  <div className={`h-1.5 shrink-0 ${
+                    idCardTheme === 'emerald' ? 'bg-emerald-500' :
+                    idCardTheme === 'indigo' ? 'bg-indigo-500' :
+                    idCardTheme === 'slate' ? 'bg-slate-500' :
+                    'bg-amber-500'
+                  }`}></div>
+
+                  {/* Card Body - Profile Details */}
+                  <div className="flex-1 p-4 flex flex-col items-center justify-between bg-emerald-50/5 relative">
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]"></div>
+
+                    {/* Profile Picture Frame placeholder */}
+                    <div className="relative mt-1 shrink-0">
+                      <div className={`w-18 h-18 rounded-full border-2 flex items-center justify-center bg-slate-50 overflow-hidden shadow-xs relative ${
+                        idCardTheme === 'emerald' ? 'border-emerald-300' :
+                        idCardTheme === 'indigo' ? 'border-indigo-300' :
+                        idCardTheme === 'slate' ? 'border-slate-300' :
+                        'border-amber-300'
+                      }`}>
+                        <User size={36} className="text-slate-400" />
+                      </div>
+                      <span className={`absolute -bottom-1 -right-1 px-2.5 py-0.5 rounded-full text-[7px] font-black text-white leading-none ${
+                        selectedIdCardStudent.isResidential 
+                          ? 'bg-rose-600' 
+                          : 'bg-emerald-600'
+                      }`}>
+                        {selectedIdCardStudent.isResidential ? 'আবাসিক' : 'অনাবাসিক'}
+                      </span>
+                    </div>
+
+                    {/* Student Basic Typography Data */}
+                    <div className="text-center w-full my-2">
+                      <h3 className="text-xs font-black text-slate-800 tracking-tight leading-none truncate mb-1.5">
+                        {selectedIdCardStudent.name}
+                      </h3>
+                      <p className={`text-[8px] font-bold inline-block px-2.5 py-0.5 rounded-md ${
+                        idCardTheme === 'emerald' ? 'bg-emerald-50 text-emerald-800' :
+                        idCardTheme === 'indigo' ? 'bg-indigo-50 text-indigo-800' :
+                        idCardTheme === 'slate' ? 'bg-slate-105 bg-slate-100 text-slate-800' :
+                        'bg-amber-50 text-amber-800'
+                      }`}>
+                        {selectedIdCardStudent.gradeClass}
+                      </p>
+                    </div>
+
+                    {/* Fields Block Grid */}
+                    <div className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 divide-y divide-slate-100 text-[8px] space-y-1.5 shrink-0">
+                      <div className="flex justify-between items-center pt-1 leading-none">
+                        <span className="text-slate-450 font-bold">রোল নম্বর (Roll):</span>
+                        <span className="font-extrabold text-slate-800 font-mono">
+                          {selectedIdCardStudent.roll.toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1.5 leading-none">
+                        <span className="text-slate-450 font-bold">পিতার নাম (Father):</span>
+                        <span className="font-bold text-slate-700 truncate max-w-[110px]">
+                          {selectedIdCardStudent.fatherName}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1.5 leading-none">
+                        <span className="text-slate-450 font-bold">মোবাইল (Mobile):</span>
+                        <span className="font-semibold text-slate-750 font-mono">
+                          {selectedIdCardStudent.phone}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* QR Code Graphic Place/Layout */}
+                    <div className="w-full flex items-center justify-between pt-2.5 shrink-0 border-t border-slate-100">
+                      <div className="flex items-center space-x-1">
+                        <QrCode size={20} className="text-slate-550 shrink-0" />
+                        <span className="text-[6px] text-slate-400 font-mono flex flex-col font-bold">
+                          <span>REG-M-{selectedIdCardStudent.id.substring(0, 4).toUpperCase()}</span>
+                          <span>CLASS-ID-{selectedIdCardStudent.roll}</span>
+                        </span>
+                      </div>
+                      <div className="text-right flex flex-col items-center">
+                        <div className="w-8 h-4 border-b border-slate-400 shrink-0"></div>
+                        <span className="text-[6px] text-slate-500 font-black pt-1 leading-none font-sans">মুহতামিমের স্বাক্ষর</span>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* CARD BACK SIDE */}
+                <div 
+                  id="id-card-back" 
+                  className={`w-full aspect-[2.6/4] max-w-[280px] mx-auto rounded-2xl border-2 shadow-lg overflow-hidden flex flex-col relative select-none bg-slate-50 ${
+                    idCardTheme === 'emerald' ? 'border-emerald-600' :
+                    idCardTheme === 'indigo' ? 'border-indigo-600' :
+                    idCardTheme === 'slate' ? 'border-slate-700' :
+                    'border-amber-600'
+                  }`}
+                >
+                  {/* Watermark Graphic Icon */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
+                    <ShieldCheck size={180} />
+                  </div>
+
+                  {/* Card Back Header */}
+                  <div className={`p-3.5 flex items-center justify-between text-white shrink-0 ${
+                    idCardTheme === 'emerald' ? 'bg-emerald-900' :
+                    idCardTheme === 'indigo' ? 'bg-indigo-900' :
+                    idCardTheme === 'slate' ? 'bg-slate-900' :
+                    'bg-amber-900'
+                  }`}>
+                    <span className="text-[7px] font-bold tracking-widest uppercase">জরুরী নির্দেশনাবলী</span>
+                    <ShieldCheck size={10} className="text-white/60" />
+                  </div>
+
+                  {/* Card Back Rules */}
+                  <div className="flex-1 p-4 flex flex-col justify-between text-slate-700 text-[8px] space-y-2">
+                    <ul className="space-y-1.5 list-disc pl-3 text-slate-550 font-bold leading-relaxed">
+                      <li>এটি মাদরাসার একটি দাপ্তরিক সম্পত্তি। কার্ডটি হারিয়ে গেলে অবিলম্বে কর্তৃপক্ষকে জানান।</li>
+                      <li>নিয়ম ও শৃঙ্খল রক্ষার্থে মাদরাসার ভিতরে পরিচয়পত্রটি পরিধান করা বাধ্যতামূলক।</li>
+                      <li>এই কার্ডটি হস্তান্তরযোগ্য নয় এবং অপব্যবহার করা দণ্ডনীয় অপরাধ।</li>
+                      <li>কার্ডধারী শিক্ষার্থী কোনো অনৈতিক কার্যকলাপে জড়িত হলে এই কার্ড বাতিল বলে গণ্য হবে।</li>
+                    </ul>
+
+                    <div className="bg-white p-2.5 border border-slate-200/70 rounded-xl space-y-1.5 shrink-0 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                      <div className="flex items-start tracking-tight">
+                        <MapPin size={9} className="text-slate-400 shrink-0 mt-0.5 mr-1" />
+                        <div>
+                          <p className="text-[7px] text-slate-400 font-extrabold leading-none mb-0.5">স্থায়ী ঠিকানা:</p>
+                          <p className="text-slate-700 font-bold leading-tight">{selectedIdCardStudent.address || 'উল্লেখ নেই'}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start tracking-tight">
+                        <Phone size={9} className="text-slate-400 shrink-0 mt-0.5 mr-1" />
+                        <div>
+                          <p className="text-[7px] text-slate-400 font-extrabold leading-none mb-0.5">অভিভাবক ফোন নম্বর:</p>
+                          <p className="text-slate-700 font-bold font-mono leading-tight">{selectedIdCardStudent.phone}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Back Footer */}
+                    <div className="pt-2 text-center border-t border-slate-200 shrink-0">
+                      <p className="text-[7px] text-slate-500 font-extrabold leading-none mb-0.5 uppercase">{madrasahName}</p>
+                      <p className="text-[6px] text-slate-400 font-medium leading-none">{madrasahSlogan} • বাংলাদেশ</p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end space-x-2 shrink-0 bg-slate-50">
+              <button
+                onClick={() => setSelectedIdCardStudent(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                বন্ধ করুন
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center space-x-1 cursor-pointer"
+              >
+                <Printer size={13} />
+                <span>প্রিন্ট করুন</span>
+              </button>
+            </div>
+
+          </motion.div>
         </div>
       )}
 

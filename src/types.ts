@@ -24,6 +24,7 @@ export interface Teacher {
   email?: string;
   address?: string;
   departments?: string;
+  photo?: string;
 }
 
 export interface AttendanceRecord {
@@ -150,6 +151,20 @@ export interface DonationRecord {
   date: string;
   receiptNo: string;
   paymentMethod: 'নগদ (Cash)' | 'বিকাশ (bKash)' | 'ব্যাংক (Bank)';
+}
+
+export interface ExpenseRecord {
+  id: string;
+  category: 'শিক্ষক ও স্টাফ বেতন' | 'ডাইনিং ও বোর্ডিং খরচ' | 'ইউটিলিটি ও বিল' | 'নির্মাণ ও সংস্কার' | 'বই ও স্টেশনারি' | 'বিবিধ খরচ';
+  title: string;
+  amount: number;
+  date: string;
+  voucherNo: string;
+  paymentMethod: 'নগদ (Cash)' | 'বিকাশ (bKash)' | 'ব্যাংক (Bank)';
+  remarks?: string;
+  payeeName?: string;
+  payeeId?: string;
+  salaryMonth?: string;
 }
 
 

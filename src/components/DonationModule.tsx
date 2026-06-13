@@ -40,6 +40,7 @@ export default function DonationModule() {
   const [formAmount, setFormAmount] = useState<number>(0);
   const [formFundType, setFormFundType] = useState<DonationRecord['fundType']>('সাধারণ ফান্ড');
   const [formPaymentMethod, setFormPaymentMethod] = useState<DonationRecord['paymentMethod']>('নগদ (Cash)');
+  const [formReceiptNo, setFormReceiptNo] = useState('');
 
   // Load or seed default donations
   useEffect(() => {
@@ -104,6 +105,8 @@ export default function DonationModule() {
     e.preventDefault();
     if (!formDonorName || Number(formAmount) <= 0) return;
 
+    const receipt = formReceiptNo.trim() || 'DN-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000);
+
     if (editingDonation) {
       const updated = donations.map(item => item.id === editingDonation.id ? {
         ...item,
@@ -111,7 +114,8 @@ export default function DonationModule() {
         phone: formPhone || 'গোপন',
         amount: Number(formAmount),
         fundType: formFundType,
-        paymentMethod: formPaymentMethod
+        paymentMethod: formPaymentMethod,
+        receiptNo: receipt
       } : item);
       saveDonations(updated);
       setIsModalOpen(false);
@@ -122,6 +126,7 @@ export default function DonationModule() {
       setFormAmount(0);
       setFormFundType('সাধারণ ফান্ড');
       setFormPaymentMethod('নগদ (Cash)');
+      setFormReceiptNo('');
     } else {
       const banglaDate = new Date().toLocaleDateString('bn-BD');
       const newDonation: DonationRecord = {
@@ -131,7 +136,7 @@ export default function DonationModule() {
         amount: Number(formAmount),
         fundType: formFundType,
         date: banglaDate,
-        receiptNo: 'DN-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000),
+        receiptNo: receipt,
         paymentMethod: formPaymentMethod
       };
 
@@ -144,6 +149,7 @@ export default function DonationModule() {
       setFormAmount(0);
       setFormFundType('সাধারণ ফান্ড');
       setFormPaymentMethod('নগদ (Cash)');
+      setFormReceiptNo('');
 
       // Trigger instant receipt presentation
       setSelectedDonationForReceipt(newDonation);
@@ -158,6 +164,7 @@ export default function DonationModule() {
     setFormAmount(record.amount);
     setFormFundType(record.fundType);
     setFormPaymentMethod(record.paymentMethod);
+    setFormReceiptNo(record.receiptNo);
     setIsModalOpen(true);
   };
 
@@ -169,6 +176,7 @@ export default function DonationModule() {
     setFormAmount(0);
     setFormFundType('সাধারণ ফান্ড');
     setFormPaymentMethod('নগদ (Cash)');
+    setFormReceiptNo('');
   };
 
   const handleDelete = (id: string) => {
@@ -287,6 +295,8 @@ export default function DonationModule() {
               setFormAmount(0);
               setFormFundType('সাধারণ ফান্ড');
               setFormPaymentMethod('নগদ (Cash)');
+              const randomReceiptNo = 'DN-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000);
+              setFormReceiptNo(randomReceiptNo);
               setIsModalOpen(true);
             }}
             className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
@@ -406,6 +416,18 @@ export default function DonationModule() {
                   onChange={(e) => setFormDonorName(e.target.value)}
                   placeholder="উদা: হাজী শামসুর রহমান (বা গোপন দানকারী)"
                   className="w-full text-xs border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">রশিদ নম্বর (Receipt No) *</label>
+                <input
+                  type="text"
+                  value={formReceiptNo}
+                  onChange={(e) => setFormReceiptNo(e.target.value)}
+                  placeholder="উদা: DN-2026-1015"
+                  className="w-full text-xs border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-700 font-mono text-slate-700"
                   required
                 />
               </div>

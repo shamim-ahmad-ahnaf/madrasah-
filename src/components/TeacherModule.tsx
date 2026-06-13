@@ -61,6 +61,7 @@ export default function TeacherModule({
   const [formEmail, setFormEmail] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formDepartments, setFormDepartments] = useState('');
+  const [formPhoto, setFormPhoto] = useState('');
 
   const openAddModal = () => {
     setEditingTeacher(null);
@@ -73,6 +74,7 @@ export default function TeacherModule({
     setFormEmail('');
     setFormAddress('');
     setFormDepartments('');
+    setFormPhoto('');
     setIsModalOpen(true);
   };
 
@@ -87,6 +89,7 @@ export default function TeacherModule({
     setFormEmail(teacher.email || '');
     setFormAddress(teacher.address || '');
     setFormDepartments(teacher.departments || '');
+    setFormPhoto(teacher.photo || '');
     setIsModalOpen(true);
   };
 
@@ -111,6 +114,7 @@ export default function TeacherModule({
       email: formEmail,
       address: formAddress,
       departments: formDepartments,
+      photo: formPhoto,
     };
 
     if (editingTeacher) {
@@ -178,8 +182,12 @@ export default function TeacherModule({
             >
               <div className="space-y-4">
                 <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 font-sans flex items-center justify-center font-bold text-lg">
-                    {teacher.name.charAt(0)}
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 font-sans flex items-center justify-center font-bold text-lg overflow-hidden shrink-0 shadow-inner">
+                    {teacher.photo ? (
+                      <img src={teacher.photo} alt={teacher.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      teacher.name.charAt(0)
+                    )}
                   </div>
                   <div>
                     <h3 
@@ -273,6 +281,67 @@ export default function TeacherModule({
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 md:pr-4">
               
+              {/* Photo Upload Area */}
+              <div className="bg-slate-50/50 p-3 rounded-2xl border border-dashed border-slate-200 space-y-2.5">
+                <label className="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider font-sans">উস্তাদের ছবি (Photo Upload or Link)</label>
+                <div className="flex items-center space-x-4">
+                  {/* Preview avatar */}
+                  <div className="relative w-14 h-14 rounded-full bg-emerald-50 border border-emerald-500/25 flex items-center justify-center text-emerald-800 font-bold text-lg overflow-hidden shrink-0 shadow-inner animate-none">
+                    {formPhoto ? (
+                      <img src={formPhoto} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      formName ? formName.charAt(0) : 'ছবি'
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <label className="bg-emerald-50 hover:bg-emerald-100 text-emerald-850 hover:text-emerald-900 border border-emerald-200 font-bold px-3 py-1.5 rounded-xl text-[10px] transition-colors cursor-pointer text-center select-none inline-block">
+                        <span>কম্পিউটার/মোবাইল থেকে আনুন</span>
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 1.5 * 1024 * 1024) {
+                                alert('ছবির সাইজ ১.৫ মেগাবাইটের বেশি হওয়া যাবে না। অনুগ্রহ করে ছোট ছবি লাইব্রেরি থেকে সিলেক্ট করুন।');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (typeof reader.result === 'string') {
+                                  setFormPhoto(reader.result);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                      {formPhoto && (
+                        <button
+                          type="button"
+                          onClick={() => setFormPhoto('')}
+                          className="text-red-650 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-xl transition-colors text-[10px] font-bold cursor-pointer"
+                        >
+                          মুছুন
+                        </button>
+                      )}
+                    </div>
+                    {/* Alternative Image URL input */}
+                    <input 
+                      type="text"
+                      value={formPhoto.startsWith('data:') ? '' : formPhoto}
+                      onChange={(e) => setFormPhoto(e.target.value)}
+                      placeholder="অথবা সরাসরি ওয়েব ইমেজের লিংক দিন..."
+                      className="w-full text-[10px] border border-slate-200 rounded-xl p-2 outline-none focus:border-emerald-600 transition-colors text-slate-700 placeholder-slate-400 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">উস্তাদ/শিক্ষকের পূর্ণ নাম *</label>
                 <input 
@@ -426,8 +495,12 @@ export default function TeacherModule({
                 </button>
                 
                 <div className="flex items-center space-x-4 mt-2">
-                  <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center font-bold text-2xl shadow-inner shrink-0">
-                    {selectedProfileTeacher.name.charAt(0)}
+                  <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center font-bold text-lg shadow-inner shrink-0 overflow-hidden">
+                    {selectedProfileTeacher.photo ? (
+                      <img src={selectedProfileTeacher.photo} alt={selectedProfileTeacher.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      selectedProfileTeacher.name.charAt(0)
+                    )}
                   </div>
                   <div>
                     <span className="bg-emerald-400/20 text-emerald-300 font-bold tracking-wider text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-400/30 uppercase">

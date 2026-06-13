@@ -1,0 +1,24 @@
+{
+  "short_name": "মাদ্রাসা",
+  "name": "দারুল উলুম মাদ্রাসা ব্যবস্থাপনা সিস্টেম",
+  "description": "একটি আধুনিক ও সম্পূর্ণ মাদ্রাসা ব্যবস্থাপনা সিস্টেম (Madrasah Management System)।",
+  "icons": [
+    {
+      "src": "/public/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#022c22",
+  "theme_color": "#065f46",
+  "display": "standalone",
+  "orientation": "portrait"
+}
