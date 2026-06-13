@@ -1252,7 +1252,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <h4 className="font-extrabold text-slate-800 text-sm">দারুল উলুম মাদ্রাসা আইকন ও লোগো</h4>
+                  <h4 className="font-extrabold text-slate-800 text-sm">{madrasahName} আইকন ও লোগো</h4>
                   <p className="text-slate-600 leading-normal text-[11px] font-sans">
                     আমাদের এই অ্যাপ্লিকেশনে একটি অত্যন্ত রমনীয় ও ঐতিহ্যবাহী সবুজ-সোনালী মার্জিত ইসলামী লোগো (খিলান গম্বুজ, কুরআনের রেহাল ও গাইড) যুক্ত করা হয়েছে। এটি শর্টকাট হিসেবে আপনার মোবাইল স্ক্রিনে দারুণ দেখাবে!
                   </p>
@@ -1312,7 +1312,7 @@ export default function App() {
                         <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-amber-400 flex items-center justify-center shadow-lg pointer-events-none shrink-0 overflow-hidden">
                           <img src="/public/logo.svg" className="w-6 h-6 object-contain" alt="M" referrerPolicy="no-referrer" />
                         </div>
-                        <span className="font-extrabold text-[8px] text-amber-300 drop-shadow-md truncate max-w-[90px] leading-tight block">দারুল উলুম মাদ্রাসা</span>
+                        <span className="font-extrabold text-[8px] text-amber-300 drop-shadow-md truncate max-w-[90px] leading-tight block">{madrasahName}</span>
                         <div className="text-[6px] bg-emerald-600/95 text-white px-1 py-0.2 rounded-full font-bold">হোম শর্টকাট</div>
                       </div>
 
@@ -1399,7 +1399,7 @@ export default function App() {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-              <span className="text-[9px] text-slate-400 font-bold font-sans">সংস্করণ ৪.৩.০ • দারুল উলুম মাদ্রাসা</span>
+              <span className="text-[9px] text-slate-400 font-bold font-sans">সংস্করণ ৪.৩.০ • {madrasahName}</span>
               <button
                 onClick={() => setIsShortcutModalOpen(false)}
                 className="bg-emerald-800 hover:bg-emerald-950 text-white font-bold py-2 px-6 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"

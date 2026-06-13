@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Teacher, ClassSchedule, MadrasahClass } from '../types';
+import { Teacher, ClassSchedule, MadrasahClass, isClassMatch } from '../types';
 import { Search, Plus, Calendar, Clock, BookOpen, Trash2, X, RefreshCw, Grid, Edit } from 'lucide-react';
 
 interface RoutineModuleProps {
@@ -95,7 +95,7 @@ export default function RoutineModule({
   ];
 
   // Filter schedules to display for selected class
-  const displayedSchedules = schedules.filter(s => s.gradeClass === selectedClassTab);
+  const displayedSchedules = schedules.filter(s => isClassMatch(s.gradeClass, selectedClassTab));
 
   return (
     <div className="space-y-6">

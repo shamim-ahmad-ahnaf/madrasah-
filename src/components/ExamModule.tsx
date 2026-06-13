@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Student, ExamMark, MadrasahClass } from '../types';
+import { Student, ExamMark, MadrasahClass, isClassMatch } from '../types';
 import { 
   Award, 
   FileSpreadsheet, 
@@ -174,7 +174,7 @@ export default function ExamModule({ students }: ExamModuleProps) {
 
   // Filters
   const filteredMarks = examMarks.filter(item => {
-    const classMatch = selectedClass === 'সব' || item.gradeClass === selectedClass;
+    const classMatch = selectedClass === 'সব' || isClassMatch(item.gradeClass, selectedClass);
     const examMatch = selectedExamType === 'সব' || item.examType === selectedExamType;
     const searchMatch = searchQuery.trim() === '' || 
       item.studentName.toLowerCase().includes(searchQuery.toLowerCase()) || 

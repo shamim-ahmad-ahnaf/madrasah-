@@ -1,4 +1,12 @@
-export type MadrasahClass = 'নূরানী' | 'নাজেরা' | 'হিফজ' | 'কিতাব বিভাগ' | 'জেনারেল';
+export type MadrasahClass = 'নূরানী' | 'নাজেরা' | 'হিফজ' | 'কিতাব বিভাগ' | 'জেনারেল' | string;
+
+export function isClassMatch(studentClass: string, filterClass: string): boolean {
+  if (!studentClass || !filterClass) return false;
+  if (filterClass === 'all' || filterClass === 'সব') return true;
+  if (studentClass === filterClass) return true;
+  if (studentClass.startsWith(filterClass)) return true;
+  return studentClass.includes(filterClass);
+}
 
 export interface Student {
   id: string;

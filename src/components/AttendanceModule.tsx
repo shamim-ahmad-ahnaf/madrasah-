@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student, Teacher, AttendanceRecord, MadrasahClass } from '../types';
+import { Student, Teacher, AttendanceRecord, MadrasahClass, isClassMatch } from '../types';
 import { Calendar, Check, AlertCircle, CheckCircle, Search, RefreshCw, Layers, ChevronLeft, ChevronRight, CalendarDays, Clock, X } from 'lucide-react';
 
 export interface TeacherAttendanceRecord {
@@ -180,10 +180,10 @@ export default function AttendanceModule({
 
   // Load or generate initial state for students when Class or Date changes
   React.useEffect(() => {
-    const classStudents = students.filter(s => s.gradeClass === selectedClass);
+    const classStudents = students.filter(s => isClassMatch(s.gradeClass, selectedClass));
     
     // Check if there are already existing records in system for this date/class
-    const existingRecords = attendance.filter(r => r.date === selectedDate && r.gradeClass === selectedClass);
+    const existingRecords = attendance.filter(r => r.date === selectedDate && isClassMatch(r.gradeClass, selectedClass));
     
     const initialPresenceState: Record<string, 'উপস্থিত' | 'অনুপস্থিত'> = {};
     
@@ -227,7 +227,7 @@ export default function AttendanceModule({
     setLocalTeacherAttendance(initialTeachersState);
   }, [selectedDate, teachers, teacherAttendance]);
 
-  const classStudents = students.filter(s => s.gradeClass === selectedClass);
+  const classStudents = students.filter(s => isClassMatch(s.gradeClass, selectedClass));
 
   // Student action helpers
   const toggleAttendance = (studentId: string) => {

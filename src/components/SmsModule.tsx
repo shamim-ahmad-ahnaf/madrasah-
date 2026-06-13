@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student, SMSLog, MadrasahClass, Notice } from '../types';
+import { Student, SMSLog, MadrasahClass, Notice, isClassMatch } from '../types';
 import { 
   MessageSquare, 
   Send, 
@@ -97,7 +97,7 @@ export default function SmsModule({
     // Filter students targeting
     let targetStudents = [...students];
     if (selectedClass !== 'all') {
-      targetStudents = students.filter(s => s.gradeClass === selectedClass);
+      targetStudents = students.filter(s => isClassMatch(s.gradeClass, selectedClass));
     }
 
     if (targetStudents.length === 0) {

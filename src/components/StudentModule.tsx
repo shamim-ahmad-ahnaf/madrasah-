@@ -1,7 +1,29 @@
 import React, { useState } from 'react';
-import { Student, MadrasahClass } from '../types';
-import { User, Search, Plus, Edit, Trash2, Phone, MapPin, Calendar, Clock, CreditCard, X, BookOpen, Check, Printer, QrCode, ShieldCheck } from 'lucide-react';
+import { Student, MadrasahClass, isClassMatch } from '../types';
+import { User, Search, Plus, Edit, Trash2, Phone, MapPin, Calendar, Clock, CreditCard, X, BookOpen, Check, Printer, QrCode, ShieldCheck, GraduationCap, Award, FileText } from 'lucide-react';
 import { motion } from 'motion/react';
+
+// Helper to parse detailed gradeClass back to division & subclass
+const parseGradeClass = (gradeClass: string) => {
+  const bases = ['নূরানী', 'নাজেরা', 'হিফজ', 'কিতাব বিভাগ', 'জেনারেল'];
+  for (const b of bases) {
+    if (gradeClass === b) {
+      return { base: b as MadrasahClass, sub: '' };
+    }
+    if (gradeClass.startsWith(b + ' - ')) {
+      return { base: b as MadrasahClass, sub: gradeClass.substring(b.length + 3) };
+    }
+    if (gradeClass.startsWith(b)) {
+      return { base: b as MadrasahClass, sub: gradeClass.substring(b.length).trim() };
+    }
+  }
+  for (const b of bases) {
+    if (gradeClass.includes(b)) {
+      return { base: b as MadrasahClass, sub: gradeClass.replace(b, '').replace(/[-\s()]+/g, '').trim() };
+    }
+  }
+  return { base: 'জেনারেল' as MadrasahClass, sub: gradeClass };
+};
 
 interface StudentModuleProps {
   students: Student[];
@@ -27,8 +49,7 @@ export default function StudentModule({
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [selectedIdCardStudent, setSelectedIdCardStudent] = useState<Student | null>(null);
-  const [idCardTheme, setIdCardTheme] = useState<'emerald' | 'indigo' | 'slate' | 'amber'>('emerald');
+  const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
 
   // Dynamic profile settings from settings master
   const madrasahName = (localStorage.getItem('madrasah_profile_name') || 'মারকাযুল কুরআন মাদরাসা').replace('ঐতিহ্যবাহী', '').trim();
@@ -41,6 +62,7 @@ export default function StudentModule({
   const [formName, setFormName] = useState('');
   const [formRoll, setFormRoll] = useState(1);
   const [formClass, setFormClass] = useState<MadrasahClass>('হিফজ');
+  const [formSubClass, setFormSubClass] = useState(''); // Custom specific class/jamat name
   const [formFatherName, setFormFatherName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
@@ -59,6 +81,7 @@ export default function StudentModule({
     setFormName('');
     setFormRoll(students.length > 0 ? Math.max(...students.map(s => s.roll)) + 1 : 1);
     setFormClass('হিফজ');
+    setFormSubClass(''); // RESET custom sub-class
     setFormFatherName('');
     setFormPhone('');
     setFormAddress('');
@@ -72,7 +95,12 @@ export default function StudentModule({
     setEditingStudent(student);
     setFormName(student.name);
     setFormRoll(student.roll);
-    setFormClass(student.gradeClass);
+    
+    // Parse the custom combined gradeClass and assign values
+    const parsed = parseGradeClass(student.gradeClass);
+    setFormClass(parsed.base);
+    setFormSubClass(parsed.sub);
+    
     setFormFatherName(student.fatherName);
     setFormPhone(student.phone);
     setFormAddress(student.address);
@@ -96,10 +124,13 @@ export default function StudentModule({
       return;
     }
 
+    // Combine department and the custom subclass name
+    const finalClass = formSubClass.trim() ? `${formClass} - ${formSubClass.trim()}` : formClass;
+
     const payload = {
       name: formName,
       roll: Number(formRoll),
-      gradeClass: formClass,
+      gradeClass: finalClass as MadrasahClass,
       fatherName: formFatherName,
       phone: formPhone,
       address: formAddress,
@@ -123,7 +154,7 @@ export default function StudentModule({
                           student.fatherName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           student.phone.includes(searchTerm);
     
-    const matchesClass = selectedClassFilter === 'all' || student.gradeClass === selectedClassFilter;
+    const matchesClass = selectedClassFilter === 'all' || isClassMatch(student.gradeClass, selectedClassFilter);
     
     const matchesType = selectedTypeFilter === 'all' || 
                         (selectedTypeFilter === 'residential' && student.isResidential) ||
@@ -226,7 +257,7 @@ export default function StudentModule({
 
             {/* Department pills */}
             {(['নূরানী', 'নাজেরা', 'হিফজ', 'কিতাব বিভাগ', 'জেনারেল'] as MadrasahClass[]).map((cls) => {
-              const count = students.filter(s => s.gradeClass === cls).length;
+              const count = students.filter(s => isClassMatch(s.gradeClass, cls)).length;
               const isActive = selectedClassFilter === cls;
               return (
                 <button
@@ -321,11 +352,11 @@ export default function StudentModule({
               {/* Action operations */}
               <div className="pt-4 mt-4 border-t border-slate-50 flex items-center justify-end gap-1.5 flex-wrap shrink-0">
                 <button 
-                  onClick={() => setSelectedIdCardStudent(student)}
-                  className="p-1 px-2.5 rounded-lg border border-indigo-100 bg-indigo-50/25 hover:bg-indigo-50 text-indigo-700 transition-colors text-xs flex items-center space-x-1 cursor-pointer"
+                  onClick={() => setSelectedProfileStudent(student)}
+                  className="p-1 px-2.5 rounded-lg border border-teal-100 bg-teal-50/25 hover:bg-teal-50 text-teal-700 transition-colors text-xs flex items-center space-x-1 cursor-pointer font-bold"
                 >
-                  <CreditCard size={12} />
-                  <span>আইডি কার্ড</span>
+                  <User size={12} />
+                  <span>প্রোফাইল</span>
                 </button>
                 <button 
                   onClick={() => openEditModal(student)}
@@ -414,6 +445,27 @@ export default function StudentModule({
                     onChange={(e) => setFormRoll(Number(e.target.value))}
                     className="w-full text-xs border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-600 transition-colors text-slate-700"
                   />
+                </div>
+
+                {/* Specific custom class input */}
+                <div className="col-span-2 bg-emerald-50/15 p-3.5 rounded-2xl border border-emerald-100/50 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>নির্দিষ্ট ক্লাস বা জামাতের নাম</span>
+                    <span className="text-[10px] text-emerald-600 font-normal">নিচে নিজের মতো কাস্টম নাম লিখুন (ঐচ্ছিক)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formSubClass}
+                    onChange={(e) => setFormSubClass(e.target.value)}
+                    placeholder={
+                      formClass === 'নূরানী' ? 'যেমন: শিশু শ্রেণী, ১ম শ্রেণী, ২য় শ্রেণী...' :
+                      formClass === 'কিতাব বিভাগ' ? 'যেমন: তাইসীর, নাযীরা, নাহবেমীর, কানূনে প্রথম, মিশকাত, দাওরায়ে হাদীস...' :
+                      formClass === 'নাজেরা' ? 'যেমন: ১ম গ্রুপ, সাধারণ নাজেরা...' :
+                      'যেমন: শিশু জামাত, কেজি, ১ম শ্রেণী, ইত্যাদি...'
+                    }
+                    className="w-full text-xs border border-slate-200 focus:border-emerald-600 rounded-xl p-2.5 bg-white text-slate-700 outline-none transition-all placeholder:text-slate-400 font-sans"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">এর ফলে মূল ড্যাশবোর্ডে ও শিক্ষার্থীর আইডিতে সম্পূর্ণ শ্রেণী নাম <strong>"{formClass}{formSubClass.trim() ? ` - ${formSubClass.trim()}` : ''}"</strong> হিসেবে প্রদর্শিত হবে।</p>
                 </div>
 
                 {/* Father / Guardian Name */}
@@ -515,241 +567,126 @@ export default function StudentModule({
         </div>
       )}
 
-      {/* Student ID Card Showcase Modal */}
-      {selectedIdCardStudent && (
-        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+      {/* Student Profile Showcase Modal */}
+      {selectedProfileStudent && (
+        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl border border-slate-200 w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-850"
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl border border-slate-200 w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-800"
           >
-            {/* Modal Header */}
-            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50 shrink-0">
-              <div className="flex items-center space-x-2">
-                <CreditCard size={18} className="text-indigo-600" />
-                <h3 className="text-sm font-black text-slate-850 font-sans">শিক্ষার্থী পরিচয়পত্র (ডিজিটাল আইডি কার্ড)</h3>
-              </div>
+            {/* Modal Header Cover */}
+            <div className="bg-gradient-to-r from-emerald-800 to-emerald-950 p-6 relative text-white shrink-0">
               <button 
-                onClick={() => setSelectedIdCardStudent(null)}
-                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                onClick={() => setSelectedProfileStudent(null)}
+                className="absolute right-4 top-4 text-emerald-200 hover:text-white bg-emerald-700/30 hover:bg-emerald-700/50 p-1.5 rounded-full transition-colors cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
+              
+              <div className="flex items-center space-x-4 mt-2">
+                <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center font-bold text-lg shadow-inner shrink-0 overflow-hidden">
+                  <User size={36} className="text-white/80" />
+                </div>
+                <div>
+                  <span className={`inline-block text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full border border-opacity-30 uppercase ${
+                    selectedProfileStudent.isResidential 
+                      ? 'bg-amber-400/20 text-amber-300 border-amber-400' 
+                      : 'bg-emerald-400/20 text-emerald-300 border-emerald-400'
+                  }`}>
+                    {selectedProfileStudent.isResidential ? 'আবাসিক শিক্ষার্থী' : 'অনাবাসিক শিক্ষার্থী'}
+                  </span>
+                  <h3 className="text-lg font-extrabold text-white mt-1 leading-tight font-sans">{selectedProfileStudent.name}</h3>
+                  <p className="text-xs text-emerald-100 font-semibold mt-1 inline-flex items-center space-x-1">
+                    <BookOpen size={14} className="text-emerald-300" />
+                    <span>{selectedProfileStudent.gradeClass}</span>
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+            {/* Profile Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5" id="printable-student-profile">
               
-              {/* Theme Selector */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-100/50 rounded-2xl border border-slate-200/50">
-                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">কার্ডের থিম নির্বাচন:</span>
-                <div className="flex space-x-2">
-                  {[
-                    { id: 'emerald', label: 'সবুজ', bg: 'bg-emerald-600' },
-                    { id: 'indigo', label: 'নীল', bg: 'bg-indigo-600' },
-                    { id: 'slate', label: 'কয়লা', bg: 'bg-slate-705 bg-slate-700' },
-                    { id: 'amber', label: 'সোনালী', bg: 'bg-amber-600' }
-                  ].map((themeOpt) => (
-                    <button
-                      key={themeOpt.id}
-                      onClick={() => setIdCardTheme(themeOpt.id as any)}
-                      className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
-                        idCardTheme === themeOpt.id 
-                          ? 'bg-slate-800 text-white shadow-xs' 
-                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                      }`}
-                    >
-                      <span className={`w-2.5 h-2.5 rounded-full ${themeOpt.bg}`}></span>
-                      {themeOpt.label}
-                    </button>
-                  ))}
+              {/* Section: Academic Info */}
+              <div className="space-y-2.5">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <GraduationCap size={14} className="text-emerald-700" />
+                  <span>একাডেমিক তথ্য (Academic Information)</span>
+                </h4>
+                <div className="bg-slate-50 border border-slate-100/70 rounded-2xl p-4 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">শ্রেণী/শাখা:</span>
+                    <strong className="text-slate-800 font-semibold">{selectedProfileStudent.gradeClass}</strong>
+                  </div>
+                  <div className="h-px bg-slate-200/50"></div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">শ্রেণী রোল নম্বর:</span>
+                    <strong className="text-slate-800 font-mono font-bold text-sm bg-slate-100 px-2 py-0.5 rounded">{selectedProfileStudent.roll.toString().padStart(2, '0')}</strong>
+                  </div>
+                  <div className="h-px bg-slate-200/50"></div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">শিক্ষার্থী রেজি. আইডি:</span>
+                    <strong className="text-emerald-800 font-mono font-bold">REG-M-{selectedProfileStudent.id.substring(0, 4).toUpperCase()}</strong>
+                  </div>
+                  <div className="h-px bg-slate-200/50"></div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">ভর্তির তারিখ:</span>
+                    <strong className="text-slate-700 font-mono font-semibold">{selectedProfileStudent.admissionDate}</strong>
+                  </div>
                 </div>
               </div>
 
-              {/* ID Card Front and Back Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-xl mx-auto py-2">
-                
-                {/* CARD FRONT SIDE */}
-                <div 
-                  id="id-card-front" 
-                  className={`w-full aspect-[2.6/4] max-w-[280px] mx-auto rounded-2xl border-2 shadow-lg overflow-hidden flex flex-col relative select-none bg-white ${
-                    idCardTheme === 'emerald' ? 'border-emerald-600' :
-                    idCardTheme === 'indigo' ? 'border-indigo-600' :
-                    idCardTheme === 'slate' ? 'border-slate-700' :
-                    'border-amber-600'
-                  }`}
-                >
-                  {/* Card Front Top Overlay Header */}
-                  <div className={`p-4 pt-5 text-center text-white relative shrink-0 ${
-                    idCardTheme === 'emerald' ? 'bg-emerald-800' :
-                    idCardTheme === 'indigo' ? 'bg-indigo-800' :
-                    idCardTheme === 'slate' ? 'bg-slate-800' :
-                    'bg-amber-800'
-                  }`}>
-                    {/* Tiny watermark curves */}
-                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
-                    
-                    {/* Madrasah Branding */}
-                    <div className="flex items-center justify-center gap-1.5 mb-1.5">
-                      {madrasahLogoStyle === 'emblem' ? (
-                        <span className="w-5 h-5 rounded-md bg-white/20 border border-white/20 flex items-center justify-center font-bold text-[9px] font-serif shrink-0">
-                          {madrasahLogoText}
-                        </span>
-                      ) : (
-                        <span className="text-sm shrink-0">{madrasahLogoIcon}</span>
-                      )}
-                      <h4 className="text-[10px] font-extrabold tracking-tight truncate leading-none uppercase">{madrasahName}</h4>
-                    </div>
-                    <p className="text-[7px] text-white/75 font-semibold tracking-widest leading-none">ছাত্র পরিচয়পত্র • STUDENT CARD</p>
+              {/* Section: Family & Contact Info */}
+              <div className="space-y-2.5">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <User size={14} className="text-emerald-700" />
+                  <span>পারিবারিক ও যোগাযোগ বিবরণ</span>
+                </h4>
+                <div className="bg-slate-50 border border-slate-100/70 rounded-2xl p-4 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">পিতা বা অভিভাবকের নাম:</span>
+                    <strong className="text-slate-800 font-semibold">{selectedProfileStudent.fatherName}</strong>
                   </div>
-
-                  {/* Top design Accent Wave Bar */}
-                  <div className={`h-1.5 shrink-0 ${
-                    idCardTheme === 'emerald' ? 'bg-emerald-500' :
-                    idCardTheme === 'indigo' ? 'bg-indigo-500' :
-                    idCardTheme === 'slate' ? 'bg-slate-500' :
-                    'bg-amber-500'
-                  }`}></div>
-
-                  {/* Card Body - Profile Details */}
-                  <div className="flex-1 p-4 flex flex-col items-center justify-between bg-emerald-50/5 relative">
-                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]"></div>
-
-                    {/* Profile Picture Frame placeholder */}
-                    <div className="relative mt-1 shrink-0">
-                      <div className={`w-18 h-18 rounded-full border-2 flex items-center justify-center bg-slate-50 overflow-hidden shadow-xs relative ${
-                        idCardTheme === 'emerald' ? 'border-emerald-300' :
-                        idCardTheme === 'indigo' ? 'border-indigo-300' :
-                        idCardTheme === 'slate' ? 'border-slate-300' :
-                        'border-amber-300'
-                      }`}>
-                        <User size={36} className="text-slate-400" />
-                      </div>
-                      <span className={`absolute -bottom-1 -right-1 px-2.5 py-0.5 rounded-full text-[7px] font-black text-white leading-none ${
-                        selectedIdCardStudent.isResidential 
-                          ? 'bg-rose-600' 
-                          : 'bg-emerald-600'
-                      }`}>
-                        {selectedIdCardStudent.isResidential ? 'আবাসিক' : 'অনাবাসিক'}
-                      </span>
-                    </div>
-
-                    {/* Student Basic Typography Data */}
-                    <div className="text-center w-full my-2">
-                      <h3 className="text-xs font-black text-slate-800 tracking-tight leading-none truncate mb-1.5">
-                        {selectedIdCardStudent.name}
-                      </h3>
-                      <p className={`text-[8px] font-bold inline-block px-2.5 py-0.5 rounded-md ${
-                        idCardTheme === 'emerald' ? 'bg-emerald-50 text-emerald-800' :
-                        idCardTheme === 'indigo' ? 'bg-indigo-50 text-indigo-800' :
-                        idCardTheme === 'slate' ? 'bg-slate-105 bg-slate-100 text-slate-800' :
-                        'bg-amber-50 text-amber-800'
-                      }`}>
-                        {selectedIdCardStudent.gradeClass}
-                      </p>
-                    </div>
-
-                    {/* Fields Block Grid */}
-                    <div className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 divide-y divide-slate-100 text-[8px] space-y-1.5 shrink-0">
-                      <div className="flex justify-between items-center pt-1 leading-none">
-                        <span className="text-slate-450 font-bold">রোল নম্বর (Roll):</span>
-                        <span className="font-extrabold text-slate-800 font-mono">
-                          {selectedIdCardStudent.roll.toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center pt-1.5 leading-none">
-                        <span className="text-slate-450 font-bold">পিতার নাম (Father):</span>
-                        <span className="font-bold text-slate-700 truncate max-w-[110px]">
-                          {selectedIdCardStudent.fatherName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center pt-1.5 leading-none">
-                        <span className="text-slate-450 font-bold">মোবাইল (Mobile):</span>
-                        <span className="font-semibold text-slate-750 font-mono">
-                          {selectedIdCardStudent.phone}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* QR Code Graphic Place/Layout */}
-                    <div className="w-full flex items-center justify-between pt-2.5 shrink-0 border-t border-slate-100">
-                      <div className="flex items-center space-x-1">
-                        <QrCode size={20} className="text-slate-550 shrink-0" />
-                        <span className="text-[6px] text-slate-400 font-mono flex flex-col font-bold">
-                          <span>REG-M-{selectedIdCardStudent.id.substring(0, 4).toUpperCase()}</span>
-                          <span>CLASS-ID-{selectedIdCardStudent.roll}</span>
-                        </span>
-                      </div>
-                      <div className="text-right flex flex-col items-center">
-                        <div className="w-8 h-4 border-b border-slate-400 shrink-0"></div>
-                        <span className="text-[6px] text-slate-500 font-black pt-1 leading-none font-sans">মুহতামিমের স্বাক্ষর</span>
-                      </div>
-                    </div>
-
+                  <div className="h-px bg-slate-200/50"></div>
+                  <div className="flex justify-between items-center text-xs border-slate-100">
+                    <span className="text-slate-500 font-medium">অভিভাবকের মোবাইল নম্বর:</span>
+                    <strong className="text-slate-800 font-mono font-bold">{selectedProfileStudent.phone}</strong>
+                  </div>
+                  <div className="h-px bg-slate-200/50"></div>
+                  <div className="flex flex-col space-y-1 text-xs">
+                    <span className="text-slate-500 font-medium col-span-1">স্থায়ী ঠিকানা:</span>
+                    <p className="text-slate-700 font-medium leading-relaxed bg-white rounded-xl p-2.5 border border-slate-100 mt-1">{selectedProfileStudent.address || 'উল্লেখ নেই'}</p>
                   </div>
                 </div>
+              </div>
 
-                {/* CARD BACK SIDE */}
-                <div 
-                  id="id-card-back" 
-                  className={`w-full aspect-[2.6/4] max-w-[280px] mx-auto rounded-2xl border-2 shadow-lg overflow-hidden flex flex-col relative select-none bg-slate-50 ${
-                    idCardTheme === 'emerald' ? 'border-emerald-600' :
-                    idCardTheme === 'indigo' ? 'border-indigo-600' :
-                    idCardTheme === 'slate' ? 'border-slate-700' :
-                    'border-amber-600'
-                  }`}
-                >
-                  {/* Watermark Graphic Icon */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                    <ShieldCheck size={180} />
+              {/* Section: Residential & Finance Status */}
+              <div className="space-y-2.5">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                  <CreditCard size={14} className="text-emerald-700" />
+                  <span>আবাসিক ও আর্থিক বিবরণ</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="bg-emerald-50/25 border border-emerald-100/40 rounded-2xl p-3.5 text-center">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase font-sans">আবাসিক অবস্থা</span>
+                    <strong className="text-slate-850 select-none block text-xs mt-1 font-bold">
+                      {selectedProfileStudent.isResidential ? 'আবাসিক (Residential)' : 'অনাবাসিক (Non-Res)'}
+                    </strong>
                   </div>
-
-                  {/* Card Back Header */}
-                  <div className={`p-3.5 flex items-center justify-between text-white shrink-0 ${
-                    idCardTheme === 'emerald' ? 'bg-emerald-900' :
-                    idCardTheme === 'indigo' ? 'bg-indigo-900' :
-                    idCardTheme === 'slate' ? 'bg-slate-900' :
-                    'bg-amber-900'
-                  }`}>
-                    <span className="text-[7px] font-bold tracking-widest uppercase">জরুরী নির্দেশনাবলী</span>
-                    <ShieldCheck size={10} className="text-white/60" />
-                  </div>
-
-                  {/* Card Back Rules */}
-                  <div className="flex-1 p-4 flex flex-col justify-between text-slate-700 text-[8px] space-y-2">
-                    <ul className="space-y-1.5 list-disc pl-3 text-slate-550 font-bold leading-relaxed">
-                      <li>এটি মাদরাসার একটি দাপ্তরিক সম্পত্তি। কার্ডটি হারিয়ে গেলে অবিলম্বে কর্তৃপক্ষকে জানান।</li>
-                      <li>নিয়ম ও শৃঙ্খল রক্ষার্থে মাদরাসার ভিতরে পরিচয়পত্রটি পরিধান করা বাধ্যতামূলক।</li>
-                      <li>এই কার্ডটি হস্তান্তরযোগ্য নয় এবং অপব্যবহার করা দণ্ডনীয় অপরাধ।</li>
-                      <li>কার্ডধারী শিক্ষার্থী কোনো অনৈতিক কার্যকলাপে জড়িত হলে এই কার্ড বাতিল বলে গণ্য হবে।</li>
-                    </ul>
-
-                    <div className="bg-white p-2.5 border border-slate-200/70 rounded-xl space-y-1.5 shrink-0 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
-                      <div className="flex items-start tracking-tight">
-                        <MapPin size={9} className="text-slate-400 shrink-0 mt-0.5 mr-1" />
-                        <div>
-                          <p className="text-[7px] text-slate-400 font-extrabold leading-none mb-0.5">স্থায়ী ঠিকানা:</p>
-                          <p className="text-slate-700 font-bold leading-tight">{selectedIdCardStudent.address || 'উল্লেখ নেই'}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start tracking-tight">
-                        <Phone size={9} className="text-slate-400 shrink-0 mt-0.5 mr-1" />
-                        <div>
-                          <p className="text-[7px] text-slate-400 font-extrabold leading-none mb-0.5">অভিভাবক ফোন নম্বর:</p>
-                          <p className="text-slate-700 font-bold font-mono leading-tight">{selectedIdCardStudent.phone}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Back Footer */}
-                    <div className="pt-2 text-center border-t border-slate-200 shrink-0">
-                      <p className="text-[7px] text-slate-500 font-extrabold leading-none mb-0.5 uppercase">{madrasahName}</p>
-                      <p className="text-[6px] text-slate-400 font-medium leading-none">{madrasahSlogan} • বাংলাদেশ</p>
-                    </div>
+                  <div className="bg-emerald-50/25 border border-emerald-100/40 rounded-2xl p-3.5 text-center">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase font-sans">মাসিক নির্ধারিত বেতন</span>
+                    <strong className="text-emerald-800 block text-sm mt-0.5 font-black">
+                      ৳ {selectedProfileStudent.monthlyFee} টাকা
+                    </strong>
                   </div>
                 </div>
+              </div>
 
+              {/* Dynamic Branding Emblem overlay */}
+              <div className="pt-4 text-center border-t border-slate-100 shrink-0">
+                <p className="text-[8px] text-slate-400 font-bold leading-none mb-0.5 uppercase tracking-wider leading-none font-sans">{madrasahName}</p>
+                <p className="text-[7px] text-slate-350 font-medium leading-none font-sans">{madrasahSlogan} • বাংলাদেশ</p>
               </div>
 
             </div>
@@ -757,13 +694,85 @@ export default function StudentModule({
             {/* Modal Actions */}
             <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end space-x-2 shrink-0 bg-slate-50">
               <button
-                onClick={() => setSelectedIdCardStudent(null)}
+                onClick={() => setSelectedProfileStudent(null)}
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 বন্ধ করুন
               </button>
+              
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  const studentToEdit = selectedProfileStudent;
+                  setSelectedProfileStudent(null);
+                  openEditModal(studentToEdit);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center space-x-1 cursor-pointer"
+              >
+                <Edit size={13} />
+                <span>সম্পাদনা করুন</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const printContents = document.getElementById('printable-student-profile')?.innerHTML;
+                  if (printContents) {
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(`
+                        <html>
+                          <head>
+                            <title>শিক্ষার্থী প্রোফাইল - ${selectedProfileStudent.name}</title>
+                            <style>
+                              body { font-family: 'Inter', system-ui, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+                              .heading { font-size: 20px; font-weight: 800; border-bottom: 2px solid #059669; padding-bottom: 10px; margin-bottom: 20px; text-align: center; color: #065f46; }
+                              .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-top: 25px; margin-bottom: 10px; }
+                              .grid { border: 1px solid #e2e8f0; border-radius: 12px; background-color: #f8fafc; padding: 15px; }
+                              .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
+                              .row:last-child { border-bottom: none; }
+                              .label { color: #64748b; font-weight: 600; }
+                              .val { color: #0f172a; font-weight: 700; }
+                              .address-val { color: #334155; font-weight: 605; padding-top: 5px; }
+                              .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #94a3b8; }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="heading">শিক্ষার্থী প্রোফাইল রেকর্ড (Student Profile Record)</div>
+                            <div style="font-size: 16px; font-weight: 850; text-align: center; margin-bottom: 5px;">${selectedProfileStudent.name}</div>
+                            <div style="font-size: 12px; text-align: center; color: #047857; font-weight: 700; margin-bottom: 20px;">${selectedProfileStudent.gradeClass}</div>
+                            
+                            <div class="section-title">একাডেমিক তথ্য</div>
+                            <div class="grid">
+                              <div class="row"><span class="label">শ্রেণী/শাখা:</span><span class="val">${selectedProfileStudent.gradeClass}</span></div>
+                              <div class="row"><span class="label">শ্রেণী রোল নম্বর:</span><span class="val">${selectedProfileStudent.roll}</span></div>
+                              <div class="row"><span class="label">রেজিস্ট্রেশন আইডি:</span><span class="val">REG-M-${selectedProfileStudent.id.substring(0, 4).toUpperCase()}</span></div>
+                              <div class="row"><span class="label">ভর্তির তারিখ:</span><span class="val">${selectedProfileStudent.admissionDate}</span></div>
+                            </div>
+
+                            <div class="section-title">পারিবারিক ও যোগাযোগ বিবরণ</div>
+                            <div class="grid">
+                              <div class="row"><span class="label">পিতা বা অভিভাবকের নাম:</span><span class="val">${selectedProfileStudent.fatherName}</span></div>
+                              <div class="row"><span class="label">মোবাইল নম্বর:</span><span class="val">${selectedProfileStudent.phone}</span></div>
+                              <div class="row" style="flex-direction: column; align-items: flex-start;"><span class="label" style="margin-bottom: 4px;">ঠিকানা:</span><span class="address-val">${selectedProfileStudent.address || 'উল্লেখ নেই'}</span></div>
+                            </div>
+
+                            <div class="section-title">অন্যান্য বিবরণ</div>
+                            <div class="grid">
+                              <div class="row"><span class="label">আবাসিক অবস্থা:</span><span class="val">${selectedProfileStudent.isResidential ? 'আবাসিক' : 'অনাবাসিক'}</span></div>
+                              <div class="row"><span class="label">মাসিক নির্ধারিত বেতন:</span><span class="val">৳ ${selectedProfileStudent.monthlyFee} টাকা</span></div>
+                            </div>
+
+                            <div class="footer">
+                              <p>${madrasahName}</p>
+                              <p>${madrasahSlogan}</p>
+                            </div>
+                            <script>window.print();</script>
+                          </body>
+                        </html>
+                      `);
+                      printWindow.document.close();
+                    }
+                  }
+                }}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center space-x-1 cursor-pointer"
               >
                 <Printer size={13} />

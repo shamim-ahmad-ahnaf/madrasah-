@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student, FeePayment, MadrasahClass, ExpenseRecord, Teacher } from '../types';
+import { Student, FeePayment, MadrasahClass, ExpenseRecord, Teacher, isClassMatch } from '../types';
 import { Search, Plus, Calendar, DollarSign, CreditCard, ChevronRight, X, Printer, Receipt, FileText, Bell, Send, Trash2, Wallet, TrendingDown, TrendingUp, Users, BookOpen, Clock, ShieldCheck } from 'lucide-react';
 
 interface FinanceModuleProps {
@@ -204,7 +204,7 @@ export default function FinanceModule({
     const matchesSearch = p.studentName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.roll.toString() === searchTerm.trim() ||
                           p.payingMonth.includes(searchTerm);
-    const matchesClass = selectedClassFilter === 'all' || p.gradeClass === selectedClassFilter;
+    const matchesClass = selectedClassFilter === 'all' || isClassMatch(p.gradeClass, selectedClassFilter);
     return matchesSearch && matchesClass;
   });
 
