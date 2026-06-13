@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Student, FeePayment, MadrasahClass, ExpenseRecord, Teacher, isClassMatch } from '../types';
-import { Search, Plus, Calendar, DollarSign, CreditCard, ChevronRight, X, Printer, Receipt, FileText, Bell, Send, Trash2, Wallet, TrendingDown, TrendingUp, Users, BookOpen, Clock, ShieldCheck } from 'lucide-react';
+import { Search, Plus, Calendar, DollarSign, CreditCard, ChevronRight, X, Printer, Receipt, FileText, Bell, Send, Trash2, Wallet, TrendingDown, TrendingUp, Users, BookOpen, Clock, ShieldCheck, Edit } from 'lucide-react';
 
 interface FinanceModuleProps {
   students: Student[];
@@ -92,6 +92,20 @@ export default function FinanceModule({
   const [expenseFormSalaryMonth, setExpenseFormSalaryMonth] = useState('জুন');
   const [expenseFormRemarks, setExpenseFormRemarks] = useState('');
 
+  const openEditExpenseModal = (expense: ExpenseRecord) => {
+    setEditExpenseId(expense.id);
+    setExpenseFormCategory(expense.category);
+    setExpenseFormTitle(expense.title);
+    setExpenseFormAmount(expense.amount);
+    setExpenseFormDate(expense.date);
+    setExpenseFormVoucherNo(expense.voucherNo);
+    setExpenseFormMethod(expense.paymentMethod);
+    setExpenseFormTeacherId(expense.payeeId || '');
+    setExpenseFormSalaryMonth(expense.salaryMonth || 'জুন');
+    setExpenseFormRemarks(expense.remarks || '');
+    setIsExpenseModalOpen(true);
+  };
+
   // Fetch teachers list dynamically or fallback to localStorage
   const loadedTeachers = React.useMemo(() => {
     if (teachers && teachers.length > 0) return teachers;
@@ -109,6 +123,8 @@ export default function FinanceModule({
   const [activeReceipt, setActiveReceipt] = useState<FeePayment | null>(null);
   const [sendSMS, setSendSMS] = useState<boolean>(true);
   const [reminderNotification, setReminderNotification] = useState<string | null>(null);
+  const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
 
   // Form states for adding payment
   const [formStudentId, setFormStudentId] = useState('');
@@ -156,8 +172,21 @@ export default function FinanceModule({
     setIsModalOpen(true);
   };
 
+  const openEditPaymentModal = (payment: FeePayment) => {
+    setEditPaymentId(payment.id);
+    setFormStudentId(payment.studentId);
+    setFormAmount(payment.amount);
+    setFormMonth(payment.payingMonth);
+    setFormDate(payment.paymentDate);
+    setFormMethod(payment.paymentMethod);
+    setFormReceiver(payment.receiverName);
+    setFormReceiptNo(payment.id.startsWith('py-') ? payment.id.replace('py-', '').toUpperCase() : payment.id);
+    setIsModalOpen(true);
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setEditPaymentId(null);
     if (onClearAddPaymentDirectly) {
       onClearAddPaymentDirectly();
     }
@@ -183,7 +212,7 @@ export default function FinanceModule({
     if (!matchedStd) return;
 
     const payload = {
-      id: formReceiptNo.trim() || 'py-' + Math.random().toString(36).substr(2, 9),
+      id: editPaymentId || formReceiptNo.trim() || 'py-' + Math.random().toString(36).substr(2, 9),
       studentId: formStudentId,
       studentName: matchedStd.name,
       roll: matchedStd.roll,
@@ -195,7 +224,7 @@ export default function FinanceModule({
       receiverName: formReceiver
     };
 
-    onAddPayment(payload, sendSMS);
+    onAddPayment(payload, editPaymentId ? false : sendSMS);
     handleCloseModal();
   };
 
@@ -254,6 +283,7 @@ export default function FinanceModule({
               setExpenseFormVoucherNo(`V-26-${Math.floor(100 + Math.random() * 900)}`);
               setExpenseFormTeacherId('');
               setExpenseFormSalaryMonth('জুন');
+              setEditExpenseId(null);
               setIsExpenseModalOpen(true);
             }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-sans text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
@@ -760,6 +790,7 @@ export default function FinanceModule({
                                    setExpenseFormTeacherId(teacher.id);
                                    setExpenseFormRemarks(`${teacher.designation} পদের সম্মানী উসুল নিশ্চিত পরিশোধ।`);
                                    setExpenseFormVoucherNo(`V-26-${Math.floor(100 + Math.random() * 900)}`);
+                                   setEditExpenseId(null);
                                    setIsExpenseModalOpen(true);
                                  }}
                               >
@@ -894,15 +925,26 @@ export default function FinanceModule({
             </div>
 
             {/* Print trigger block button */}
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-2">
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
+              <button 
+                onClick={() => {
+                  openEditPaymentModal(activeReceipt);
+                  setActiveReceipt(null);
+                }}
+                className="px-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semi-bold font-bold py-2 rounded-xl text-xs flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                title="রশিদ সংশোধন করুন"
+              >
+                <Edit size={13} />
+                <span>সংশোধন</span>
+              </button>
               <button 
                 onClick={() => {
                   window.print();
                 }}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-2 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors"
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-2 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
               >
                 <Printer size={13} />
-                <span>রশিদ প্রিন্ট বা পিডিএফ ডাউনলোড করুন</span>
+                <span>রশিদ প্রিন্ট বা ডাউনলোড</span>
               </button>
             </div>
 
@@ -1071,11 +1113,14 @@ export default function FinanceModule({
             <div className="bg-indigo-800 text-white p-4 flex items-center justify-between shrink-0">
               <h4 className="font-bold text-sm font-sans flex items-center space-x-2">
                 <TrendingDown size={18} />
-                <span>নতুন মাদরাসা ব্যয় ও সম্মানী হাসিয়া পরিশোধ লিপিবদ্ধ করুন</span>
+                <span>{editExpenseId ? 'ব্যয় বিবরণী ও ভাউচার সংশোধন করুন' : 'নতুন মাদরাসা ব্যয় ও সম্মানী হাসিয়া পরিশোধ লিপিবদ্ধ করুন'}</span>
               </h4>
               <button 
-                onClick={() => setIsExpenseModalOpen(false)}
-                className="text-white/80 hover:text-white bg-indigo-700/50 hover:bg-indigo-700 p-1 rounded-lg transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsExpenseModalOpen(false);
+                  setEditExpenseId(null);
+                }}
+                className="text-white/85 hover:text-white bg-indigo-750 p-1 rounded-lg transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1092,8 +1137,8 @@ export default function FinanceModule({
 
                 const matchedTeacher = loadedTeachers.find(t => t.id === expenseFormTeacherId);
 
-                const newRecord: ExpenseRecord = {
-                  id: `exp_${Date.now()}`,
+                const payloadRecord: ExpenseRecord = {
+                  id: editExpenseId || `exp_${Date.now()}`,
                   category: expenseFormCategory,
                   title: expenseFormTitle,
                   amount: Number(expenseFormAmount),
@@ -1109,12 +1154,18 @@ export default function FinanceModule({
                 };
 
                 setExpenses(prev => {
-                  const updated = [newRecord, ...prev];
+                  let updated: ExpenseRecord[];
+                  if (editExpenseId) {
+                    updated = prev.map(item => item.id === editExpenseId ? payloadRecord : item);
+                  } else {
+                    updated = [payloadRecord, ...prev];
+                  }
                   localStorage.setItem('madrasah_expenses', JSON.stringify(updated));
                   return updated;
                 });
 
                 setIsExpenseModalOpen(false);
+                setEditExpenseId(null);
               }}
               className="p-5 space-y-4 max-h-[85vh] overflow-y-auto"
             >
@@ -1284,7 +1335,10 @@ export default function FinanceModule({
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
                 <button 
                   type="button" 
-                  onClick={() => setIsExpenseModalOpen(false)}
+                  onClick={() => {
+                    setIsExpenseModalOpen(false);
+                    setEditExpenseId(null);
+                  }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                 >
                   বাতিল করুন
@@ -1293,7 +1347,7 @@ export default function FinanceModule({
                   type="submit" 
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-xs cursor-pointer"
                 >
-                  ব্যয় লিপিবদ্ধ করুন
+                  {editExpenseId ? 'ভাউচার তথ্য হালনাগাদ করুন' : 'ব্যয় লিপিবদ্ধ করুন'}
                 </button>
               </div>
 
@@ -1386,13 +1440,25 @@ export default function FinanceModule({
             </div>
 
             {/* Primary printer triggers */}
-            <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center justify-end space-x-2 shrink-0">
+            <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
               <button 
                 type="button" 
                 onClick={() => setActiveExpenseVoucher(null)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-colors"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs px-3 py-2 rounded-xl font-bold cursor-pointer transition-colors"
               >
                 বন্ধ করুন
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  openEditExpenseModal(activeExpenseVoucher);
+                  setActiveExpenseVoucher(null);
+                }}
+                className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3.5 py-2 rounded-xl font-bold flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
+                title="সংশোধন করুন"
+              >
+                <Edit size={13} />
+                <span>সংশোধন</span>
               </button>
               <button 
                 type="button" 
@@ -1406,10 +1472,10 @@ export default function FinanceModule({
                     window.location.reload();
                   }
                 }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-xl font-bold flex items-center space-x-1 transition-colors shadow-xs cursor-pointer"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-xl font-bold flex items-center justify-center space-x-1 transition-colors shadow-xs cursor-pointer"
               >
                 <Printer size={13} />
-                <span>ভাউচার ডাউনলোড বা প্রিন্ট</span>
+                <span>প্রিন্ট বা ডাউনলোড</span>
               </button>
             </div>
           </div>
