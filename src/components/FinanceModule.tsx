@@ -125,6 +125,7 @@ export default function FinanceModule({
   const [reminderNotification, setReminderNotification] = useState<string | null>(null);
   const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
   // Form states for adding payment
   const [formStudentId, setFormStudentId] = useState('');
@@ -187,6 +188,7 @@ export default function FinanceModule({
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditPaymentId(null);
+    setStudentSearchQuery('');
     if (onClearAddPaymentDirectly) {
       onClearAddPaymentDirectly();
     }
@@ -200,6 +202,25 @@ export default function FinanceModule({
       setFormAmount(selected.monthlyFee);
     }
   };
+
+  const filteredStudentsForSelect = React.useMemo(() => {
+    if (!studentSearchQuery.trim()) return students;
+    const query = studentSearchQuery.toLowerCase().trim();
+    return students.filter(s => 
+      s.name.toLowerCase().includes(query) ||
+      s.roll.toString().includes(query) ||
+      s.gradeClass.toLowerCase().includes(query)
+    );
+  }, [students, studentSearchQuery]);
+
+  React.useEffect(() => {
+    if (isModalOpen && filteredStudentsForSelect.length > 0 && studentSearchQuery.trim()) {
+      const isStillInList = filteredStudentsForSelect.some(s => s.id === formStudentId);
+      if (!isStillInList) {
+        handleStudentChange(filteredStudentsForSelect[0].id);
+      }
+    }
+  }, [filteredStudentsForSelect, isModalOpen, studentSearchQuery, formStudentId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -970,19 +991,44 @@ export default function FinanceModule({
               
               {/* Choose Student */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">শিক্ষার্থী নির্বাচন *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1 font-sans">শিক্ষার্থী নির্বাচন *</label>
                 {students.length > 0 ? (
-                  <select
-                    value={formStudentId}
-                    onChange={(e) => handleStudentChange(e.target.value)}
-                    className="w-full text-xs border border-slate-200 rounded-xl p-2.5 outline-none bg-white text-slate-700 focus:border-emerald-600"
-                  >
-                    {students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.gradeClass}, রোল: {s.roll})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        placeholder="নাম, রোল বা শ্রেণী লিখে খুঁজুন..."
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-xl pl-8 pr-8 py-2.5 outline-none focus:border-emerald-600 font-sans text-slate-700 bg-slate-50/50"
+                      />
+                      <Search className="absolute left-2.5 top-3 text-slate-400" size={13} />
+                      {studentSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setStudentSearchQuery('')}
+                          className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs py-1 px-1.5 font-bold transition-all rounded-md"
+                        >
+                          মুছুন
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={formStudentId}
+                      onChange={(e) => handleStudentChange(e.target.value)}
+                      className="w-full text-xs border border-slate-200 rounded-xl p-2.5 outline-none bg-white text-slate-700 focus:border-emerald-600"
+                    >
+                      {filteredStudentsForSelect.length > 0 ? (
+                        filteredStudentsForSelect.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.gradeClass}, রোল: {s.roll})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="" disabled>কোনো রেজাল্ট পাওয়া যায়নি!</option>
+                      )}
+                    </select>
+                  </div>
                 ) : (
                   <span className="text-xs text-red-600 font-bold block bg-red-50 p-2 rounded-lg">
                     প্রথমে শিক্ষার্থী ভর্তি করতে হবে!
