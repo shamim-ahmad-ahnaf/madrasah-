@@ -938,10 +938,7 @@ export default function FinanceModule({
 
               </div>
 
-              {/* Islamic quote signature block */}
-              <div className="text-center pt-4 border-t border-dashed border-slate-200 text-[10px] text-slate-400 italic">
-                "নিশ্চয়ই দান ও ইলম অর্জনের সাহায্যকারীকে আল্লাহ পুরস্কৃত করবেন।"
-              </div>
+
 
             </div>
 

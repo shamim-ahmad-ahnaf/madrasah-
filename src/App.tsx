@@ -381,11 +381,18 @@ export default function App() {
 
   // 4. Payments Finance Book
   const handleAddPayment = (paymentData: Omit<FeePayment, 'id'> & { id?: string }, sendSMS: boolean) => {
+    const isEdit = paymentData.id ? payments.some(p => p.id === paymentData.id) : false;
     const newPayment: FeePayment = {
       ...paymentData,
       id: paymentData.id || ('py-' + Math.random().toString(36).substr(2, 9))
     };
-    saveAndSetPayments([newPayment, ...payments]);
+    
+    if (isEdit) {
+      const updatedList = payments.map(p => p.id === newPayment.id ? newPayment : p);
+      saveAndSetPayments(updatedList);
+    } else {
+      saveAndSetPayments([newPayment, ...payments]);
+    }
 
     if (sendSMS) {
       const bkBDate = new Date().toLocaleDateString('bn-BD') + ' ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
