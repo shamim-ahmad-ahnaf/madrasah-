@@ -119,6 +119,22 @@ export interface BorrowRecord {
   status: 'borrowed' | 'returned' | 'overdue';
 }
 
+export interface SubjectScore {
+  subjectName: string;
+  marks: number;
+  fullMarks?: number; // default 100
+}
+
+export interface GradeRule {
+  id: string;
+  name: string;
+  division: string;
+  minAverage: number;
+  maxAverage: number;
+  badgeClass: string;
+  description?: string;
+}
+
 export interface ExamMark {
   id: string;
   studentId: string;
@@ -126,12 +142,15 @@ export interface ExamMark {
   roll: number;
   gradeClass: MadrasahClass;
   examType: 'ত্রৈমাসিক' | 'ষাণ্মাসিক' | 'বার্ষিক';
-  quranMarks: number;
-  hadithMarks: number;
-  arabicMarks: number;
-  banglaMarks: number;
-  mathMarks: number;
+  subjectScores?: SubjectScore[];
+  // Legacy fields for backward compatibility
+  quranMarks?: number;
+  hadithMarks?: number;
+  arabicMarks?: number;
+  banglaMarks?: number;
+  mathMarks?: number;
   totalMarks: number;
+  averageMarks?: number;
   grade: string;
 }
 

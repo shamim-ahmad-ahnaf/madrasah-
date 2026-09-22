@@ -549,6 +549,8 @@ export default function App() {
             teachers={teachers}
             attendance={attendance}
             onSaveAttendance={handleSaveAttendance}
+            madrasahName={madrasahName}
+            madrasahSlogan={madrasahSlogan}
           />
         );
       case 'finance':

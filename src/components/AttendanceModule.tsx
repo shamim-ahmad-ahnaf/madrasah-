@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Teacher, AttendanceRecord, MadrasahClass, isClassMatch } from '../types';
-import { Calendar, Check, AlertCircle, CheckCircle, Search, RefreshCw, Layers, ChevronLeft, ChevronRight, CalendarDays, Clock, X } from 'lucide-react';
+import { Calendar, Check, AlertCircle, CheckCircle, Search, RefreshCw, Layers, ChevronLeft, ChevronRight, CalendarDays, Clock, X, FileText, Printer } from 'lucide-react';
+import AttendanceDailyReport from './AttendanceDailyReport';
 
 export interface TeacherAttendanceRecord {
   id: string;
@@ -18,17 +19,25 @@ interface AttendanceModuleProps {
   teachers: Teacher[];
   attendance: AttendanceRecord[];
   onSaveAttendance: (records: Omit<AttendanceRecord, 'id'>[], sendSMS: boolean) => void;
+  madrasahName?: string;
+  madrasahSlogan?: string;
 }
 
 export default function AttendanceModule({
   students,
   teachers,
   attendance,
-  onSaveAttendance
+  onSaveAttendance,
+  madrasahName,
+  madrasahSlogan
 }: AttendanceModuleProps) {
-  const [activeTab, setActiveTab] = useState<'students' | 'teachers'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'report' | 'teachers'>('students');
   const [selectedClass, setSelectedClass] = useState<MadrasahClass>('হিফজ');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Report Specific States for Date & Class Filter
+  const [reportDate, setReportDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [reportClass, setReportClass] = useState<MadrasahClass | 'সকল'>('হিফজ');
   
   // Local active roster state for students
   const [localAttendance, setLocalAttendance] = useState<Record<string, 'উপস্থিত' | 'অনুপস্থিত'>>({});
@@ -416,20 +425,35 @@ export default function AttendanceModule({
       
       {/* Tab Navigation header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:max-w-md shadow-2xs border border-slate-200/50 animate-fade-in">
+        <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:max-w-xl shadow-2xs border border-slate-200/50 animate-fade-in">
           <button
             onClick={() => setActiveTab('students')}
-            className={`flex-1 text-center font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer select-none ${
+            className={`flex-1 text-center font-bold text-xs py-2.5 px-3 rounded-lg transition-all cursor-pointer select-none ${
               activeTab === 'students'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50/50'
             }`}
           >
-            ছাত্রদের হাজিরা খাতা
+            ছাত্রদের হাজিরা গ্রহণ
+          </button>
+          <button
+            onClick={() => {
+              setReportDate(selectedDate);
+              setReportClass(selectedClass);
+              setActiveTab('report');
+            }}
+            className={`flex-1 text-center font-bold text-xs py-2.5 px-3 rounded-lg transition-all cursor-pointer select-none flex items-center justify-center space-x-1.5 ${
+              activeTab === 'report'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50/50'
+            }`}
+          >
+            <FileText size={14} />
+            <span>দৈনিক হাজিরা রিপোর্ট</span>
           </button>
           <button
             onClick={() => setActiveTab('teachers')}
-            className={`flex-1 text-center font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer select-none ${
+            className={`flex-1 text-center font-bold text-xs py-2.5 px-3 rounded-lg transition-all cursor-pointer select-none ${
               activeTab === 'teachers'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50/50'
@@ -447,99 +471,145 @@ export default function AttendanceModule({
         )}
       </div>
 
-      {/* Roster Controls */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-        {activeTab === 'students' ? (
-          <>
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center space-x-2">
-              <CalendarDays className="text-emerald-700" size={18} />
-              <span>ছাত্রদের দৈনিক হাজিরা খাতা (Student Attendance)</span>
-            </h2>
-            <p className="text-xs text-slate-400">শ্রেণিভিত্তিক বা দৈনিক তারিখ নির্বাচন করে ছাত্রদের হাজিরা ও অনুপস্থিতি ট্র্যাক করুন।</p>
-          </>
-        ) : (
-          <>
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center space-x-2">
-              <Clock className="text-emerald-700" size={18} />
-              <span>উস্তাদ ও স্টাফ শিফট এবং হাজিরা খাতা (Staff Duty Log)</span>
-            </h2>
-            <p className="text-xs text-slate-400">মাদ্রাসার সমস্ত উস্তাদ, মুফতি ও স্টাফ সদস্যদের আগমন (Sign-in), প্রস্থান (Sign-out) সময় ও হাজিরা ট্র্যাক করুন।</p>
-          </>
-        )}
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          
-          {/* Choose Class / Staff Label */}
+      {/* Roster Controls (Only shown for active roster taking) */}
+      {activeTab !== 'report' && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
           {activeTab === 'students' ? (
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">শ্রেণী / বিভাগ নির্ধারণ</label>
-              <select
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value as MadrasahClass)}
-                className="w-full text-xs font-semibold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all text-slate-600"
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-800 flex items-center space-x-2">
+                  <CalendarDays className="text-emerald-700" size={18} />
+                  <span>ছাত্রদের দৈনিক হাজিরা খাতা (Student Attendance)</span>
+                </h2>
+                <p className="text-xs text-slate-400">শ্রেণিভিত্তিক বা দৈনিক তারিখ নির্বাচন করে ছাত্রদের হাজিরা ও অনুপস্থিতি ট্র্যাক করুন।</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportDate(selectedDate);
+                  setReportClass(selectedClass);
+                  setActiveTab('report');
+                }}
+                className="self-start sm:self-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-xl border border-emerald-200 text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
               >
-                <option value="নূরানী">নূরানী বিভাগ</option>
-                <option value="নাজেরা">নাজেরা বিভাগ</option>
-                <option value="হিফজ">হিফজ বিভাগ</option>
-                <option value="কিতাব বিভাগ">কিতাব বিভাগ</option>
-                <option value="জেনারেল">জেনারেল বিভাগ</option>
-              </select>
+                <FileText size={13} />
+                <span>এই দিনের রিপোর্ট ফিল্টার করুন</span>
+              </button>
             </div>
           ) : (
+            <>
+              <h2 className="text-lg font-extrabold text-slate-800 flex items-center space-x-2">
+                <Clock className="text-emerald-700" size={18} />
+                <span>উস্তাদ ও স্টাফ শিফট এবং হাজিরা খাতা (Staff Duty Log)</span>
+              </h2>
+              <p className="text-xs text-slate-400">মাদ্রাসার সমস্ত উস্তাদ, মুফতি ও স্টাফ সদস্যদের আগমন (Sign-in), প্রস্থান (Sign-out) সময় ও হাজিরা ট্র্যাক করুন।</p>
+            </>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            
+            {/* Choose Class / Staff Label */}
+            {activeTab === 'students' ? (
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">শ্রেণী / বিভাগ নির্ধারণ</label>
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value as MadrasahClass)}
+                  className="w-full text-xs font-semibold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all text-slate-600 cursor-pointer"
+                >
+                  <option value="নূরানী">নূরানী বিভাগ</option>
+                  <option value="নাজেরা">নাজেরা বিভাগ</option>
+                  <option value="হিফজ">হিফজ বিভাগ</option>
+                  <option value="কিতাব বিভাগ">কিতাব বিভাগ</option>
+                  <option value="জেনারেল">জেনারেল বিভাগ</option>
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">স্টাফ ক্যাটাগরি</label>
+                <div className="w-full text-xs font-bold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 text-slate-500 flex items-center space-x-2 cursor-not-allowed">
+                  <span>মাদ্রাসার সকল শিক্ষক ও কর্মচারী ({convertToBanglaNumber(teachers.length)} জন)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Date Picker */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">স্টাফ ক্যাটাগরি</label>
-              <div className="w-full text-xs font-bold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 text-slate-500 flex items-center space-x-2 cursor-not-allowed">
-                <span>মাদ্রাসার সকল শিক্ষক ও কর্মচারী ({convertToBanglaNumber(teachers.length)} জন)</span>
-              </div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">হাজিরার তারিখ</label>
+              <input 
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setReportDate(e.target.value);
+                }}
+                className="w-full text-xs font-semibold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all text-slate-600 font-mono cursor-pointer"
+              />
             </div>
-          )}
 
-          {/* Date Picker */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5">হাজিরার তারিখ</label>
-            <input 
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full text-xs font-semibold bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all text-slate-600 font-mono"
-            />
+            {/* Real-time Counter status badge inside filter */}
+            {activeTab === 'students' ? (
+              <div className="flex items-end justify-between border border-emerald-100/50 bg-emerald-50/35 p-2.5 rounded-xl">
+                <div>
+                  <span className="text-[10px] text-slate-500 block">উপস্থিতি পার্সেন্টেজ</span>
+                  <span className="text-xl font-extrabold text-emerald-800 font-mono">{convertToBanglaNumber(presentRate)}%</span>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="text-slate-600 font-bold block">{convertToBanglaNumber(presentCount)} / {convertToBanglaNumber(totalInClass)} উপস্থিত</span>
+                  <span className="text-red-600 text-[10px] block font-semibold">{convertToBanglaNumber(absentCount)} অনুপস্থিত</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-end justify-between border border-teal-100/50 bg-teal-50/35 p-2.5 rounded-xl">
+                <div>
+                  <span className="text-[10px] text-slate-500 block">কর্ম দিবস উপস্থিতি</span>
+                  <span className="text-xl font-extrabold text-teal-800 font-mono">{convertToBanglaNumber(teachersPresentRate)}%</span>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="text-slate-600 font-bold block">{convertToBanglaNumber(teachersPresentCount)} / {convertToBanglaNumber(totalTeachersCount)} উপস্থিত</span>
+                  <span className="text-amber-600 text-[10px] block font-semibold">{convertToBanglaNumber(teachersLeaveCount)} জন ছুটি • {convertToBanglaNumber(teachersAbsentCount)} অনুপস্থিত</span>
+                </div>
+              </div>
+            )}
+
           </div>
-
-          {/* Real-time Counter status badge inside filter */}
-          {activeTab === 'students' ? (
-            <div className="flex items-end justify-between border border-emerald-100/50 bg-emerald-50/35 p-2.5 rounded-xl">
-              <div>
-                <span className="text-[10px] text-slate-500 block">উপস্থিতি পার্সেন্টেজ</span>
-                <span className="text-xl font-extrabold text-emerald-800 font-mono">{convertToBanglaNumber(presentRate)}%</span>
-              </div>
-              <div className="text-right text-xs">
-                <span className="text-slate-600 font-bold block">{convertToBanglaNumber(presentCount)} / {convertToBanglaNumber(totalInClass)} উপস্থিত</span>
-                <span className="text-red-600 text-[10px] block font-semibold">{convertToBanglaNumber(absentCount)} অনুপস্থিত</span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-end justify-between border border-teal-100/50 bg-teal-50/35 p-2.5 rounded-xl">
-              <div>
-                <span className="text-[10px] text-slate-500 block">কর্ম দিবস উপস্থিতি</span>
-                <span className="text-xl font-extrabold text-teal-800 font-mono">{convertToBanglaNumber(teachersPresentRate)}%</span>
-              </div>
-              <div className="text-right text-xs">
-                <span className="text-slate-600 font-bold block">{convertToBanglaNumber(teachersPresentCount)} / {convertToBanglaNumber(totalTeachersCount)} উপস্থিত</span>
-                <span className="text-amber-600 text-[10px] block font-semibold">{convertToBanglaNumber(teachersLeaveCount)} জন ছুটি • {convertToBanglaNumber(teachersAbsentCount)} অনুপস্থিত</span>
-              </div>
-            </div>
-          )}
-
         </div>
-      </div>
+      )}
 
-      {/* Roster Listing */}
+      {/* Roster Listing & Report Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Active Checklist */}
+        {/* Active Checklist or Daily Report */}
         <div className="lg:col-span-2 space-y-4 animate-fade-in">
+
+          {/* Daily Attendance Report Tab */}
+          {activeTab === 'report' && (
+            <AttendanceDailyReport
+              students={students}
+              attendance={attendance}
+              reportDate={reportDate}
+              reportClass={reportClass}
+              onDateChange={(newDate) => {
+                setReportDate(newDate);
+                setSelectedDate(newDate);
+              }}
+              onClassChange={(newClass) => {
+                setReportClass(newClass);
+                if (newClass !== 'সকল') {
+                  setSelectedClass(newClass);
+                }
+              }}
+              onGoToTakeAttendance={(d, cls) => {
+                setSelectedDate(d);
+                setSelectedClass(cls);
+                setActiveTab('students');
+              }}
+              madrasahName={madrasahName}
+              madrasahSlogan={madrasahSlogan}
+            />
+          )}
           
-          {activeTab === 'students' ? (
+          {activeTab === 'students' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="bg-emerald-800/5 p-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
                 <div>
@@ -559,6 +629,18 @@ export default function AttendanceModule({
                     className="bg-red-50 hover:bg-red-100 text-red-800 font-semibold px-2.5 py-1 rounded-lg transition-colors border border-red-100 cursor-pointer text-[11px]"
                   >
                     সবাই অনুপস্থিত
+                  </button>
+                  <button
+                    onClick={() => {
+                      setReportDate(selectedDate);
+                      setReportClass(selectedClass);
+                      setActiveTab('report');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer text-[11px] flex items-center space-x-1 shadow-2xs"
+                    title="এই তারিখ ও শ্রেণীর পূর্ণাঙ্গ রিপোর্ট দেখুন"
+                  >
+                    <FileText size={12} />
+                    <span>রিপোর্ট দেখুন</span>
                   </button>
                 </div>
               </div>
@@ -622,7 +704,9 @@ export default function AttendanceModule({
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'teachers' && (
             // TEACHERS ATTENDANCE ROSTER PANEL
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="bg-emerald-800/5 p-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
@@ -843,7 +927,10 @@ export default function AttendanceModule({
                 return (
                   <button
                     key={`day-${day}`}
-                    onClick={() => setSelectedDate(dateStr)}
+                    onClick={() => {
+                      setSelectedDate(dateStr);
+                      setReportDate(dateStr);
+                    }}
                     className={`h-8.5 flex flex-col items-center justify-center rounded-lg transition-all relative ${cellBg} ${borderStyle} cursor-pointer`}
                     title={summary ? `${convertToBanglaNumber(summary.present)}/${convertToBanglaNumber(summary.total)} উপস্থিত (${convertToBanglaNumber(summary.rate)}%)` : 'কোন রেকর্ড নেই'}
                   >
@@ -887,9 +974,14 @@ export default function AttendanceModule({
                     const rate = Math.round((log.present / log.total) * 100);
                     const isCurrentLogDateSelected = selectedDate === log.date;
                     return (
-                      <button
+                      <div
                         key={idx}
-                        onClick={() => setSelectedDate(log.date)}
+                        onClick={() => {
+                          setSelectedDate(log.date);
+                          setSelectedClass(log.class as MadrasahClass);
+                          setReportDate(log.date);
+                          setReportClass(log.class as MadrasahClass);
+                        }}
                         className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                           isCurrentLogDateSelected 
                             ? 'bg-emerald-50 border-emerald-200 shadow-2xs' 
@@ -900,13 +992,30 @@ export default function AttendanceModule({
                           <span className="text-[10px] font-bold text-slate-700 font-mono block">{convertToBanglaNumber(log.date)}</span>
                           <span className="text-xs text-slate-500 mt-0.5 inline-block">{log.class} বিভাগ</span>
                         </div>
-                        <div className="text-right font-sans">
-                          <span className="text-[10px] bg-emerald-100/70 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
-                            {convertToBanglaNumber(rate)}% উপস্থিত
-                          </span>
-                          <span className="text-[9px] text-slate-400 block mt-1">{convertToBanglaNumber(log.present)}/{convertToBanglaNumber(log.total)} শিক্ষার্থী</span>
+                        <div className="text-right font-sans flex items-center space-x-2">
+                          <div>
+                            <span className="text-[10px] bg-emerald-100/70 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                              {convertToBanglaNumber(rate)}% উপস্থিত
+                            </span>
+                            <span className="text-[9px] text-slate-400 block mt-1">{convertToBanglaNumber(log.present)}/{convertToBanglaNumber(log.total)} শিক্ষার্থী</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDate(log.date);
+                              setSelectedClass(log.class as MadrasahClass);
+                              setReportDate(log.date);
+                              setReportClass(log.class as MadrasahClass);
+                              setActiveTab('report');
+                            }}
+                            className="text-[10px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                            title="এই তারিখ ও বিভাগের রিপোর্ট দেখুন"
+                          >
+                            রিপোর্ট
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
