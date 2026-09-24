@@ -1,3 +1,15 @@
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  module: 'student' | 'teacher' | 'attendance' | 'finance' | 'routine' | 'notice' | 'exam' | 'library' | 'hostel' | 'donation' | 'inventory' | 'settings' | 'general';
+  type: 'create' | 'update' | 'delete' | 'sync' | 'info';
+  timestamp: string;
+  isRead: boolean;
+  senderDeviceId?: string;
+  senderName?: string;
+}
+
 export type MadrasahClass = 'নূরানী' | 'নাজেরা' | 'হিফজ' | 'কিতাব বিভাগ' | 'জেনারেল' | string;
 
 export function isClassMatch(studentClass: string, filterClass: string): boolean {

@@ -13,7 +13,8 @@ import {
   FeePayment, 
   ClassSchedule, 
   Notice,
-  SMSLog
+  SMSLog,
+  AppNotification
 } from './types';
 
 // Component imports
@@ -31,6 +32,9 @@ import ExamModule from './components/ExamModule';
 import HostelModule from './components/HostelModule';
 import DonationModule from './components/DonationModule';
 import StoreInventoryModule from './components/StoreInventoryModule';
+import NotificationCenter from './components/NotificationCenter';
+import OwnerAuthModal from './components/OwnerAuthModal';
+import { realtimeSync, playNotificationChime } from './services/realtimeSync';
 
 // Icon imports
 import { 
@@ -54,7 +58,12 @@ import {
   Boxes,
   Smartphone,
   Plus,
-  Download
+  Lock,
+  Unlock,
+  Radio,
+  ShieldCheck,
+  KeyRound,
+  Check
 } from 'lucide-react';
 
 export default function App() {
@@ -80,6 +89,8 @@ export default function App() {
   const [adminTitle, setAdminTitle] = useState(() => {
     return localStorage.getItem('madrasah_admin_title') || 'মুহতামিম / সুপারিন্টেন্ডেন্ট';
   });
+  
+  // Settings & Master Password Modal States
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPasswordPromptOpen, setIsPasswordPromptOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -88,11 +99,11 @@ export default function App() {
     return localStorage.getItem('madrasah_admin_password') || 'admin123';
   });
 
-  const handleOpenSettings = () => {
-    setIsPasswordPromptOpen(true);
-    setPasswordInput('');
-    setPasswordError('');
-  };
+  // Password Change Form inside Settings
+  const [changePassCurrent, setChangePassCurrent] = useState('');
+  const [changePassNew, setChangePassNew] = useState('');
+  const [changePassConfirm, setChangePassConfirm] = useState('');
+  const [changePassMessage, setChangePassMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Mobile menu control
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -102,7 +113,7 @@ export default function App() {
 
   // Direct modal trigger states (from Dashboard quick links)
   const [triggerStudentModal, setTriggerStudentModal] = useState(false);
-  const [triggerPaymentModal, setTriggerPaymentModal] = useState(false);
+  const [triggerPaymentModal, setTriggerPaymentModal] = useState<boolean | string>(false);
 
   // Core Data States
   const [students, setStudents] = useState<Student[]>([]);
@@ -113,11 +124,138 @@ export default function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
 
+  // Real-Time Notifications State with strict deduplication
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const stored = localStorage.getItem('madrasah_notifications');
+      if (stored) {
+        const parsed: AppNotification[] = JSON.parse(stored);
+        const map = new Map<string, AppNotification>();
+        parsed.forEach((n) => {
+          if (n && n.id && !map.has(n.id)) {
+            map.set(n.id, n);
+          }
+        });
+        const deduplicated = Array.from(map.values());
+        localStorage.setItem('madrasah_notifications', JSON.stringify(deduplicated));
+        return deduplicated;
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [currentToast, setCurrentToast] = useState<AppNotification | null>(null);
+
+  // Helper to safely add or update notifications with guaranteed zero duplicate keys
+  const addOrUpdateNotification = (notif: AppNotification) => {
+    setNotifications((prev) => {
+      const map = new Map<string, AppNotification>();
+      map.set(notif.id, notif);
+      prev.forEach((n) => {
+        if (n && n.id && !map.has(n.id)) {
+          map.set(n.id, n);
+        }
+      });
+      const updated = Array.from(map.values()).slice(0, 100);
+      try {
+        localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
+      } catch (e) {
+        // ignore
+      }
+      return updated;
+    });
+    setCurrentToast(notif);
+    playNotificationChime();
+  };
+
+  // Owner Password Authorization State
+  const checkIsOwnerAuthorized = (): boolean => {
+    try {
+      const expire = localStorage.getItem('madrasah_owner_auth_expire');
+      if (expire && parseInt(expire, 10) > Date.now()) {
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  };
+
+  const [isOwnerAuthorized, setIsOwnerAuthorized] = useState<boolean>(checkIsOwnerAuthorized);
+  const [isOwnerAuthModalOpen, setIsOwnerAuthModalOpen] = useState(false);
+  const [pendingOwnerAction, setPendingOwnerAction] = useState<{
+    title: string;
+    description: string;
+    actionButtonText?: string;
+    action: () => void;
+  } | null>(null);
+
   // PWA & Home Screen shortcut state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [isSuccessfullyInstalled, setIsSuccessfullyInstalled] = useState(false);
 
+  // Helper to require owner password before executing any final change
+  const requireOwnerAuth = (
+    title: string,
+    description: string,
+    onAuthorized: () => void,
+    actionButtonText = 'অনুমোদন ও ফাইনাল করুন'
+  ) => {
+    if (checkIsOwnerAuthorized()) {
+      setIsOwnerAuthorized(true);
+      onAuthorized();
+      return;
+    }
+
+    setPendingOwnerAction({
+      title,
+      description,
+      actionButtonText,
+      action: () => {
+        setIsOwnerAuthorized(true);
+        onAuthorized();
+      }
+    });
+    setIsOwnerAuthModalOpen(true);
+  };
+
+  // Lock owner mode immediately
+  const handleLockOwnerMode = () => {
+    localStorage.removeItem('madrasah_owner_auth_expire');
+    setIsOwnerAuthorized(false);
+    const lockToast: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'মালিক মোড লক করা হয়েছে',
+      message: 'এখন যেকোনো পরিবর্তন ফাইনাল করার জন্য মালিকের পাসওয়ার্ড আবশ্যক হবে।',
+      module: 'settings',
+      type: 'info',
+      timestamp: new Date().toISOString(),
+      isRead: false
+    };
+    setCurrentToast(lockToast);
+  };
+
+  // Toast Auto-Dismiss
+  useEffect(() => {
+    if (currentToast) {
+      const timer = setTimeout(() => {
+        setCurrentToast(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentToast]);
+
+  // Check auth expiration timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsOwnerAuthorized(checkIsOwnerAuthorized());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // PWA Prompt Listeners
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -217,83 +355,217 @@ export default function App() {
       setSmsLogs(initialSms);
       localStorage.setItem('madrasah_sms_logs', JSON.stringify(initialSms));
     }
+
+    // Notifications initial seeding if empty
+    const storedNotifs = localStorage.getItem('madrasah_notifications');
+    if (!storedNotifs || storedNotifs === '[]') {
+      const defaultNotifs: AppNotification[] = [
+        {
+          id: 'notif_welcome_live',
+          title: 'স্বাগতম! লাইভ নোটিফিকেশন ও সিঙ্ক সক্রিয় 🟢',
+          message: 'যেকোনো ডিভাইস হতে ছাত্র ভর্তি, ফি গ্রহণ, হাজিরা ও পরীক্ষার ফলাফল আপডেট হলে তৎক্ষণাৎ নোটিফিকেশন আসবে।',
+          module: 'general',
+          type: 'info',
+          timestamp: new Date().toISOString(),
+          isRead: false
+        },
+        {
+          id: 'notif_welcome_security',
+          title: 'মালিক পাসওয়ার্ড সুরক্ষা চালু 🔐',
+          message: 'যেকোনো পরিবর্তন ডাটাবেজে ফাইনাল করার জন্য মালিকের পাসওয়ার্ড আবশ্যক (ডিফল্ট: admin123)।',
+          module: 'settings',
+          type: 'info',
+          timestamp: new Date(Date.now() - 120000).toISOString(),
+          isRead: false
+        }
+      ];
+      setNotifications(defaultNotifs);
+      localStorage.setItem('madrasah_notifications', JSON.stringify(defaultNotifs));
+    }
+
+    // Real-Time Multi-Device Listener Subscription
+    const unsubscribe = realtimeSync.subscribe((event) => {
+      // Data synchronization from other devices / tabs
+      if (event.key === 'madrasah_students' && Array.isArray(event.data)) {
+        setStudents(event.data);
+      } else if (event.key === 'madrasah_teachers' && Array.isArray(event.data)) {
+        setTeachers(event.data);
+      } else if (event.key === 'madrasah_payments' && Array.isArray(event.data)) {
+        setPayments(event.data);
+      } else if (event.key === 'madrasah_attendance' && Array.isArray(event.data)) {
+        setAttendance(event.data);
+      } else if (event.key === 'madrasah_schedules' && Array.isArray(event.data)) {
+        setSchedules(event.data);
+      } else if (event.key === 'madrasah_notices' && Array.isArray(event.data)) {
+        setNotices(event.data);
+      } else if (event.key === 'madrasah_sms_logs' && Array.isArray(event.data)) {
+        setSmsLogs(event.data);
+      } else if (event.key === 'madrasah_profile_name') {
+        setMadrasahName(event.data);
+      } else if (event.key === 'madrasah_profile_slogan') {
+        setMadrasahSlogan(event.data);
+      }
+
+      // Notifications from other devices, tabs, or local
+      if (event.notification) {
+        addOrUpdateNotification(event.notification);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  // Sync state helpers
-  const saveAndSetStudents = (updatedList: Student[]) => {
-    setStudents(updatedList);
-    localStorage.setItem('madrasah_students', JSON.stringify(updatedList));
-  };
-
-  const saveAndSetTeachers = (updatedList: Teacher[]) => {
-    setTeachers(updatedList);
-    localStorage.setItem('madrasah_teachers', JSON.stringify(updatedList));
-  };
-
-  const saveAndSetPayments = (updatedList: FeePayment[]) => {
-    setPayments(updatedList);
-    localStorage.setItem('madrasah_payments', JSON.stringify(updatedList));
-  };
-
-  const saveAndSetSchedules = (updatedList: ClassSchedule[]) => {
-    setSchedules(updatedList);
-    localStorage.setItem('madrasah_schedules', JSON.stringify(updatedList));
-  };
-
-  const saveAndSetNotices = (updatedList: Notice[]) => {
-    setNotices(updatedList);
-    localStorage.setItem('madrasah_notices', JSON.stringify(updatedList));
-  };
-
-  // CRUD Operations handler
+  // CRUD Operations handlers with Owner Password Protection and Multi-Device Real-time Sync
   // 1. Students
   const handleAddStudent = (studentData: Omit<Student, 'id'>) => {
-    const newStudent: Student = {
-      ...studentData,
-      id: 'st-' + Math.random().toString(36).substr(2, 9)
-    };
-    saveAndSetStudents([newStudent, ...students]);
+    requireOwnerAuth(
+      'নতুন শিক্ষার্থী ভর্তি অনুমোদন',
+      `শিক্ষার্থী "${studentData.name}" এর ভর্তি নিশ্চিত ও ডাটাবেজে ফাইনাল করতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const newStudent: Student = {
+          ...studentData,
+          id: 'st-' + Math.random().toString(36).substr(2, 9)
+        };
+        const updatedList = [newStudent, ...students];
+        setStudents(updatedList);
+        
+        realtimeSync.syncChange('madrasah_students', updatedList, {
+          title: 'নতুন শিক্ষার্থী ভর্তি সম্পন্ন',
+          message: `${newStudent.name} (রোল: ${newStudent.roll}, শ্রেণী: ${newStudent.gradeClass}) নতুন ভর্তি হয়েছে।`,
+          module: 'student',
+          type: 'create'
+        });
+      }
+    );
   };
 
   const handleUpdateStudent = (updatedStudent: Student) => {
-    const updated = students.map(s => s.id === updatedStudent.id ? updatedStudent : s);
-    saveAndSetStudents(updated);
+    requireOwnerAuth(
+      'শিক্ষার্থীর তথ্য পরিবর্তন অনুমোদন',
+      `শিক্ষার্থী "${updatedStudent.name}" এর তথ্য পরিবর্তন ফাইনাল করার জন্য মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updatedList = students.map(s => s.id === updatedStudent.id ? updatedStudent : s);
+        setStudents(updatedList);
+
+        realtimeSync.syncChange('madrasah_students', updatedList, {
+          title: 'শিক্ষার্থী তথ্য সংশোধিত',
+          message: `${updatedStudent.name} এর তথ্য সফলভাবে আপডেট করা হয়েছে।`,
+          module: 'student',
+          type: 'update'
+        });
+      }
+    );
   };
 
   const handleDeleteStudent = (id: string) => {
-    const updated = students.filter(s => s.id !== id);
-    saveAndSetStudents(updated);
+    const studentToDelete = students.find(s => s.id === id);
+    requireOwnerAuth(
+      'শিক্ষার্থী মুছে ফেলা অনুমোদন',
+      `শিক্ষার্থী "${studentToDelete?.name || ''}" এর রেকর্ড স্থায়ীভাবে মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updatedList = students.filter(s => s.id !== id);
+        setStudents(updatedList);
+
+        realtimeSync.syncChange('madrasah_students', updatedList, {
+          title: 'শিক্ষার্থী রেকর্ড অপসারিত',
+          message: `${studentToDelete?.name || 'শিক্ষার্থী'} এর রেকর্ড তালিকা হতে মুছে ফেলা হয়েছে।`,
+          module: 'student',
+          type: 'delete'
+        });
+      },
+      'মুছে ফেলা নিশ্চিত করুন'
+    );
   };
 
   // 2. Teachers
   const handleAddTeacher = (teacherData: Omit<Teacher, 'id'>) => {
-    const newTeacher: Teacher = {
-      ...teacherData,
-      id: 'tc-' + Math.random().toString(36).substr(2, 9)
-    };
-    saveAndSetTeachers([newTeacher, ...teachers]);
+    requireOwnerAuth(
+      'নতুন শিক্ষক নিয়োগ অনুমোদন',
+      `উস্তাদ "${teacherData.name}" এর তথ্য যুক্ত ও ফাইনাল করার জন্য মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const newTeacher: Teacher = {
+          ...teacherData,
+          id: 'tc-' + Math.random().toString(36).substr(2, 9)
+        };
+        const updatedList = [newTeacher, ...teachers];
+        setTeachers(updatedList);
+
+        realtimeSync.syncChange('madrasah_teachers', updatedList, {
+          title: 'নতুন শিক্ষক যুক্ত হয়েছেন',
+          message: `${newTeacher.name} (${newTeacher.designation}) এর তথ্য যুক্ত করা হয়েছে।`,
+          module: 'teacher',
+          type: 'create'
+        });
+      }
+    );
   };
 
   const handleUpdateTeacher = (updatedTeacher: Teacher) => {
-    const updated = teachers.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
-    saveAndSetTeachers(updated);
+    requireOwnerAuth(
+      'শিক্ষকের তথ্য হালনাগাদ অনুমোদন',
+      `উস্তাদ "${updatedTeacher.name}" এর তথ্য সংরক্ষণ করতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updatedList = teachers.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
+        setTeachers(updatedList);
+
+        realtimeSync.syncChange('madrasah_teachers', updatedList, {
+          title: 'শিক্ষক তথ্য হালনাগাদ',
+          message: `${updatedTeacher.name} এর তথ্য সফলভাবে আপডেট হয়েছে।`,
+          module: 'teacher',
+          type: 'update'
+        });
+      }
+    );
   };
 
   const handleDeleteTeacher = (id: string) => {
-    const updated = teachers.filter(t => t.id !== id);
-    saveAndSetTeachers(updated);
+    const teacherToDelete = teachers.find(t => t.id === id);
+    requireOwnerAuth(
+      'শিক্ষক তথ্য মুছে ফেলার অনুমোদন',
+      `উস্তাদ "${teacherToDelete?.name || ''}" এর প্রোফাইল মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updatedList = teachers.filter(t => t.id !== id);
+        setTeachers(updatedList);
+
+        realtimeSync.syncChange('madrasah_teachers', updatedList, {
+          title: 'শিক্ষক রেকর্ড অপসারিত',
+          message: `${teacherToDelete?.name || 'শিক্ষক'} এর রেকর্ড মুছে ফেলা হয়েছে।`,
+          module: 'teacher',
+          type: 'delete'
+        });
+      },
+      'মুছে ফেলা নিশ্চিত করুন'
+    );
   };
 
   // Core SMS helpers
   const handleAddSmsLogs = (newLogs: SMSLog[]) => {
     const updated = [...newLogs, ...smsLogs];
     setSmsLogs(updated);
-    localStorage.setItem('madrasah_sms_logs', JSON.stringify(updated));
+    realtimeSync.syncChange('madrasah_sms_logs', updated, {
+      title: 'এসএমএস বার্তা প্রেরিত',
+      message: `${newLogs.length} টি বার্তা সফলভাবে তৈরি করা হয়েছে।`,
+      module: 'general',
+      type: 'info'
+    });
   };
 
   const handleClearSmsLogs = () => {
-    setSmsLogs([]);
-    localStorage.setItem('madrasah_sms_logs', JSON.stringify([]));
+    requireOwnerAuth(
+      'এসএমএস লগ মোছার অনুমোদন',
+      'সকল এসএমএস লগ মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        setSmsLogs([]);
+        realtimeSync.syncChange('madrasah_sms_logs', [], {
+          title: 'এসএমএস লগ সাফ করা হয়েছে',
+          message: 'সকল বার্তা হিস্ট্রি মুছে ফেলা হয়েছে।',
+          module: 'general',
+          type: 'delete'
+        });
+      }
+    );
   };
 
   const handleSendReminderSMS = (student: Student) => {
@@ -309,10 +581,14 @@ export default function App() {
       message: `আস-সালামু আলাইকুম। শ্রদ্ধেয় অভিভাবক ${student.fatherName}, আপনার সন্তান ${student.name} (রোল: ${student.roll}, বিভাগ: ${student.gradeClass}) এর মাসিক ফি বাবদ মোট ৳${student.monthlyFee} টাকা পরিশোধ করার জন্য অনুরোধ করা হলো। - দারুল উলুম মাদ্রাসা`,
       status: 'সফল (Success)'
     };
-    // Direct array update because setSmsLogs/localStorage can have state delays inside immediate handler
     const updated = [reminderSms, ...smsLogs];
     setSmsLogs(updated);
-    localStorage.setItem('madrasah_sms_logs', JSON.stringify(updated));
+    realtimeSync.syncChange('madrasah_sms_logs', updated, {
+      title: 'বেতন তাগাদা এসএমএস তৈরি',
+      message: `${student.name} এর অভিভাবকের কাছে ফি রিমাইন্ডার প্রস্তুত হয়েছে।`,
+      module: 'finance',
+      type: 'info'
+    });
   };
 
   const handleSendNoticeSMS = (notice: Notice) => {
@@ -332,166 +608,354 @@ export default function App() {
     });
     const updated = [...noticeLogs, ...smsLogs];
     setSmsLogs(updated);
-    localStorage.setItem('madrasah_sms_logs', JSON.stringify(updated));
+    realtimeSync.syncChange('madrasah_sms_logs', updated, {
+      title: 'নোটিশ এসএমএস ব্রডকাস্ট',
+      message: `নোটিশ "${notice.title}" শিক্ষার্থীদের মাঝে প্রেরিত হয়েছে।`,
+      module: 'notice',
+      type: 'info'
+    });
   };
 
   // 3. Attendance Save/Override
   const handleSaveAttendance = (newRecords: Omit<AttendanceRecord, 'id'>[], sendSMS: boolean) => {
-    // Generate fresh ids and merge
-    const incomingWithIds: AttendanceRecord[] = newRecords.map(rec => ({
-      ...rec,
-      id: 'att-' + Math.random().toString(36).substr(2, 9)
-    }));
+    requireOwnerAuth(
+      'দৈনিক হাজিরা সংরক্ষণ অনুমোদন',
+      'আজকের হাজিরা খাতা নিশ্চিত ও সংরক্ষণ করতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const incomingWithIds: AttendanceRecord[] = newRecords.map(rec => ({
+          ...rec,
+          id: 'att-' + Math.random().toString(36).substr(2, 9)
+        }));
 
-    // Filter out previous records of selected date/class to prevent dupes
-    const firstRec = newRecords[0];
-    let filteredPrev = [...attendance];
-    if (firstRec) {
-      filteredPrev = attendance.filter(
-        rec => !(rec.date === firstRec.date && rec.gradeClass === firstRec.gradeClass)
-      );
-    }
+        const firstRec = newRecords[0];
+        let filteredPrev = [...attendance];
+        if (firstRec) {
+          filteredPrev = attendance.filter(
+            r => !(r.date === firstRec.date && r.gradeClass === firstRec.gradeClass)
+          );
+        }
 
-    const merged = [...incomingWithIds, ...filteredPrev];
-    setAttendance(merged);
-    localStorage.setItem('madrasah_attendance', JSON.stringify(merged));
+        const finalAttendance = [...filteredPrev, ...incomingWithIds];
+        setAttendance(finalAttendance);
 
-    if (sendSMS) {
-      const bkBDate = new Date().toLocaleDateString('bn-BD') + ' ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-      const createdSmsLogs: SMSLog[] = newRecords.map(rec => {
-        const studentObj = students.find(s => s.id === rec.studentId);
-        const parentPhone = studentObj?.phone || '01700-000000';
-        return {
-          id: 'sms-' + Math.random().toString(36).substr(2, 9),
-          timestamp: bkBDate,
-          studentId: rec.studentId,
-          studentName: rec.studentName,
-          gradeClass: rec.gradeClass,
-          phone: parentPhone,
-          type: 'হাজিরা (Attendance)',
-          message: `শ্রদ্ধেয় অভিভাবক, আপনার সন্তান ${rec.studentName} (শ্রেণী: ${rec.gradeClass}, রোল: ${rec.roll}) আজ ${rec.status} রয়েছে। - দারুল উলুম মাদ্রাসা`,
-          status: 'সফল (Success)'
-        };
-      });
-      const updated = [...createdSmsLogs, ...smsLogs];
-      setSmsLogs(updated);
-      localStorage.setItem('madrasah_sms_logs', JSON.stringify(updated));
-    }
+        realtimeSync.syncChange('madrasah_attendance', finalAttendance, {
+          title: 'হাজিরা খাতা হালনাগাদ',
+          message: `${firstRec ? firstRec.gradeClass + ' এর ' : ''}${firstRec?.date || 'আজকের'} হাজিরা সংরক্ষিত হয়েছে (${incomingWithIds.length} জন শিক্ষার্থী)।`,
+          module: 'attendance',
+          type: 'update'
+        });
+
+        // Trigger SMS for absentees if enabled
+        if (sendSMS && firstRec) {
+          const bkBDate = new Date().toLocaleDateString('bn-BD') + ' ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+          const absenteeLogs: SMSLog[] = incomingWithIds
+            .filter(r => r.status === 'অনুপস্থিত')
+            .map(rec => {
+              const studentObj = students.find(s => s.id === rec.studentId);
+              const parentPhone = studentObj?.phone || '01700-000000';
+              return {
+                id: 'sms-' + Math.random().toString(36).substr(2, 9),
+                timestamp: bkBDate,
+                studentId: rec.studentId,
+                studentName: rec.studentName,
+                gradeClass: rec.gradeClass,
+                phone: parentPhone,
+                type: 'হাজিরা (Attendance)',
+                message: `আস-সালামু আলাইকুম। আপনার সন্তান ${rec.studentName} আজ (${firstRec.date}) মাদ্রাসায় অনুপস্থিত রয়েছে। জরুরি প্রয়োজনে মুহতামিমের সাথে যোগাযোগ করুন। - দারুল উলুম মাদ্রাসা`,
+                status: 'সফল (Success)'
+              };
+            });
+
+          if (absenteeLogs.length > 0) {
+            const updatedSms = [...absenteeLogs, ...smsLogs];
+            setSmsLogs(updatedSms);
+            realtimeSync.syncChange('madrasah_sms_logs', updatedSms, {
+              title: 'অনুপস্থিতি এসএমএস প্রেরিত',
+              message: `${absenteeLogs.length} জন অনুপস্থিত শিক্ষার্থীর অভিভাবককে বার্তা পাঠানো হয়েছে।`,
+              module: 'attendance',
+              type: 'info'
+            });
+          }
+        }
+      }
+    );
   };
 
-  // 4. Payments Finance Book
-  const handleAddPayment = (paymentData: Omit<FeePayment, 'id'> & { id?: string }, sendSMS: boolean) => {
-    const isEdit = paymentData.id ? payments.some(p => p.id === paymentData.id) : false;
-    const newPayment: FeePayment = {
-      ...paymentData,
-      id: paymentData.id || ('py-' + Math.random().toString(36).substr(2, 9))
-    };
-    
-    if (isEdit) {
-      const updatedList = payments.map(p => p.id === newPayment.id ? newPayment : p);
-      saveAndSetPayments(updatedList);
-    } else {
-      saveAndSetPayments([newPayment, ...payments]);
-    }
+  // 4. Financial Fee Payments
+  const handleAddPayment = (paymentData: Omit<FeePayment, 'id'>) => {
+    requireOwnerAuth(
+      'ফি আদায় ও রসিদ অনুমোদন',
+      `${paymentData.studentName} এর ৳${paymentData.amount} টাকা ফি গ্রহণ নিশ্চিত ও ফাইনাল করতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const newPayment: FeePayment = {
+          ...paymentData,
+          id: 'pay-' + Math.random().toString(36).substr(2, 9)
+        };
+        const updatedList = [newPayment, ...payments];
+        setPayments(updatedList);
 
-    if (sendSMS) {
-      const bkBDate = new Date().toLocaleDateString('bn-BD') + ' ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-      const studentObj = students.find(s => s.id === paymentData.studentId);
-      const parentPhone = studentObj?.phone || '01700-000000';
-      const paymentSms: SMSLog = {
-        id: 'sms-' + Math.random().toString(36).substr(2, 9),
-        timestamp: bkBDate,
-        studentId: paymentData.studentId,
-        studentName: paymentData.studentName,
-        gradeClass: paymentData.gradeClass,
-        phone: parentPhone,
-        type: 'পেমেন্ট রশিদ (Payment Receipt)',
-        message: `শ্রদ্ধেয় অভিভাবক, আপনার সন্তান ${paymentData.studentName} এর ${paymentData.payingMonth} মাসের হাদিয়ার মোট ৳${paymentData.amount} সফলভাবে সংগৃহীত হয়েছে। রশিদ নং: ${newPayment.id}। - দারুল উলুম মাদ্রাসা`,
-        status: 'সফল (Success)'
-      };
-      const updated = [paymentSms, ...smsLogs];
-      setSmsLogs(updated);
-      localStorage.setItem('madrasah_sms_logs', JSON.stringify(updated));
-    }
+        realtimeSync.syncChange('madrasah_payments', updatedList, {
+          title: 'নতুন ফি আদায় সম্পন্ন',
+          message: `${paymentData.studentName} (${paymentData.gradeClass}) এর ${paymentData.payingMonth} মাসের ৳${paymentData.amount} টাকা জমা হয়েছে।`,
+          module: 'finance',
+          type: 'create'
+        });
+
+        // Trigger SMS Receipt
+        const studentObj = students.find(s => s.id === paymentData.studentId);
+        const bkBDate = new Date().toLocaleDateString('bn-BD') + ' ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+        const parentPhone = studentObj?.phone || '01700-000000';
+        const paymentSms: SMSLog = {
+          id: 'sms-' + Math.random().toString(36).substr(2, 9),
+          timestamp: bkBDate,
+          studentId: paymentData.studentId,
+          studentName: paymentData.studentName,
+          gradeClass: paymentData.gradeClass,
+          phone: parentPhone,
+          type: 'পেমেন্ট রশিদ (Payment Receipt)',
+          message: `শ্রদ্ধেয় অভিভাবক, আপনার সন্তান ${paymentData.studentName} এর ${paymentData.payingMonth} মাসের হাদিয়ার মোট ৳${paymentData.amount} সফলভাবে সংগৃহীত হয়েছে। রশিদ নং: ${newPayment.id}। - দারুল উলুম মাদ্রাসা`,
+          status: 'সফল (Success)'
+        };
+        const updatedSms = [paymentSms, ...smsLogs];
+        setSmsLogs(updatedSms);
+        realtimeSync.syncChange('madrasah_sms_logs', updatedSms, {
+          title: 'পেমেন্ট রশিদ এসএমএস',
+          message: `${paymentData.studentName} এর ফি জমার রশিদ প্রস্তুত হয়েছে।`,
+          module: 'finance',
+          type: 'info'
+        });
+      }
+    );
   };
 
   const handleDeletePayment = (id: string) => {
-    const updated = payments.filter(p => p.id !== id);
-    saveAndSetPayments(updated);
+    const paymentToDelete = payments.find(p => p.id === id);
+    requireOwnerAuth(
+      'ফি রসিদ মুছে ফেলার অনুমোদন',
+      `রসিদ নং "${paymentToDelete?.id || ''}" (৳${paymentToDelete?.amount || 0}) মুছে ফেলার জন্য মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updatedList = payments.filter(p => p.id !== id);
+        setPayments(updatedList);
+
+        realtimeSync.syncChange('madrasah_payments', updatedList, {
+          title: 'ফি রসিদ মুছে ফেলা হয়েছে',
+          message: `${paymentToDelete?.studentName || ''} এর ৳${paymentToDelete?.amount || 0} টাকার ফি রসিদ অপসারিত হয়েছে।`,
+          module: 'finance',
+          type: 'delete'
+        });
+      },
+      'মুছে ফেলা নিশ্চিত করুন'
+    );
   };
 
   // 5. Schedules Routines
   const handleAddSchedule = (scheduleData: Omit<ClassSchedule, 'id'>) => {
-    const newSchedule: ClassSchedule = {
-      ...scheduleData,
-      id: 'sch-' + Math.random().toString(36).substr(2, 9)
-    };
-    saveAndSetSchedules([newSchedule, ...schedules]);
+    requireOwnerAuth(
+      'শ্রেণী রুটিন যোগ অনুমোদন',
+      'শ্রেণী রুটিনে নতুন পিরিয়ড যুক্ত করতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const newSchedule: ClassSchedule = {
+          ...scheduleData,
+          id: 'sch-' + Math.random().toString(36).substr(2, 9)
+        };
+        const updatedList = [newSchedule, ...schedules];
+        setSchedules(updatedList);
+
+        realtimeSync.syncChange('madrasah_schedules', updatedList, {
+          title: 'শ্রেণী রুটিন হালনাগাদ',
+          message: `${newSchedule.gradeClass} এর জন্য "${newSchedule.subject}" বিষয়ের ক্লাস যুক্ত করা হয়েছে।`,
+          module: 'routine',
+          type: 'create'
+        });
+      }
+    );
   };
 
   const handleUpdateSchedule = (updatedSchedule: ClassSchedule) => {
-    const updated = schedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s);
-    saveAndSetSchedules(updated);
+    requireOwnerAuth(
+      'রুটিন পরিবর্তন অনুমোদন',
+      'রুটিনের সময়সূচি পরিবর্তন নিশ্চিত করতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const updatedList = schedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s);
+        setSchedules(updatedList);
+
+        realtimeSync.syncChange('madrasah_schedules', updatedList, {
+          title: 'রুটিন সময়সূচি সংশোধিত',
+          message: `${updatedSchedule.gradeClass} এর "${updatedSchedule.subject}" ক্লাসের সময় পরিবর্তন করা হয়েছে।`,
+          module: 'routine',
+          type: 'update'
+        });
+      }
+    );
   };
 
   const handleDeleteSchedule = (id: string) => {
-    const updated = schedules.filter(s => s.id !== id);
-    saveAndSetSchedules(updated);
-  };
+    requireOwnerAuth(
+      'রুটিন পিরিয়ড মুছে ফেলার অনুমোদন',
+      'রুটিন হতে এই পিরিয়ড মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const updatedList = schedules.filter(s => s.id !== id);
+        setSchedules(updatedList);
 
-  // Database actions: Wiping and restoring
-  const handleWipeDatabase = () => {
-    localStorage.setItem('madrasah_students', '[]');
-    localStorage.setItem('madrasah_teachers', '[]');
-    localStorage.setItem('madrasah_attendance', '[]');
-    localStorage.setItem('madrasah_payments', '[]');
-    localStorage.setItem('madrasah_schedules', '[]');
-    localStorage.setItem('madrasah_notices', '[]');
-    localStorage.setItem('madrasah_sms_logs', '[]');
-    localStorage.setItem('madrasah_books', '[]');
-    localStorage.setItem('madrasah_borrow_records', '[]');
-    
-    setStudents([]);
-    setTeachers([]);
-    setAttendance([]);
-    setPayments([]);
-    setSchedules([]);
-    setNotices([]);
-    setSmsLogs([]);
-    
-    window.location.reload();
-  };
-
-  const handleRestoreDemoDatabase = () => {
-    localStorage.removeItem('madrasah_students');
-    localStorage.removeItem('madrasah_teachers');
-    localStorage.removeItem('madrasah_attendance');
-    localStorage.removeItem('madrasah_payments');
-    localStorage.removeItem('madrasah_schedules');
-    localStorage.removeItem('madrasah_notices');
-    localStorage.removeItem('madrasah_sms_logs');
-    localStorage.removeItem('madrasah_books');
-    localStorage.removeItem('madrasah_borrow_records');
-    window.location.reload();
+        realtimeSync.syncChange('madrasah_schedules', updatedList, {
+          title: 'রুটিন পিরিয়ড অপসারিত',
+          message: 'রুটিন হতে একটি পিরিয়ড মুছে ফেলা হয়েছে।',
+          module: 'routine',
+          type: 'delete'
+        });
+      },
+      'মুছে ফেলা নিশ্চিত করুন'
+    );
   };
 
   // 6. Public Notices
   const handleAddNotice = (noticeData: Omit<Notice, 'id'>) => {
-    const newNotice: Notice = {
-      ...noticeData,
-      id: 'nt-' + Math.random().toString(36).substr(2, 9)
-    };
-    saveAndSetNotices([newNotice, ...notices]);
+    requireOwnerAuth(
+      'নতুন নোটিশ প্রকাশ অনুমোদন',
+      `নোটিশ "${noticeData.title}" প্রকাশ করতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const newNotice: Notice = {
+          ...noticeData,
+          id: 'nt-' + Math.random().toString(36).substr(2, 9)
+        };
+        const updatedList = [newNotice, ...notices];
+        setNotices(updatedList);
+
+        realtimeSync.syncChange('madrasah_notices', updatedList, {
+          title: 'নতুন নোটিশ প্রকাশিত',
+          message: `বিজ্ঞপ্তি: "${newNotice.title}" সকল ডিভাইসে প্রকাশিত হয়েছে।`,
+          module: 'notice',
+          type: 'create'
+        });
+      }
+    );
   };
 
   const handleUpdateNotice = (updatedNotice: Notice) => {
-    const updated = notices.map(n => n.id === updatedNotice.id ? updatedNotice : n);
-    saveAndSetNotices(updated);
+    requireOwnerAuth(
+      'নোটিশ সংশোধন অনুমোদন',
+      'বিজ্ঞপ্তির বিষয়বস্তু পরিবর্তন করতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const updatedList = notices.map(n => n.id === updatedNotice.id ? updatedNotice : n);
+        setNotices(updatedList);
+
+        realtimeSync.syncChange('madrasah_notices', updatedList, {
+          title: 'নোটিশ সংশোধিত হয়েছে',
+          message: `বিজ্ঞপ্তি "${updatedNotice.title}" আপডেট করা হয়েছে।`,
+          module: 'notice',
+          type: 'update'
+        });
+      }
+    );
   };
 
   const handleDeleteNotice = (id: string) => {
-    const updated = notices.filter(n => n.id !== id);
-    saveAndSetNotices(updated);
+    requireOwnerAuth(
+      'নোটিশ অপসারণ অনুমোদন',
+      'নোটিশটি বোর্ড থেকে মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        const updatedList = notices.filter(n => n.id !== id);
+        setNotices(updatedList);
+
+        realtimeSync.syncChange('madrasah_notices', updatedList, {
+          title: 'নোটিশ অপসারিত',
+          message: 'একটি নোটিশ বোর্ড হতে মুছে ফেলা হয়েছে।',
+          module: 'notice',
+          type: 'delete'
+        });
+      },
+      'মুছে ফেলা নিশ্চিত করুন'
+    );
+  };
+
+  // Database actions: Wiping and restoring
+  const handleWipeDatabase = () => {
+    requireOwnerAuth(
+      'সমস্ত তথ্য সাফ করার চূড়ান্ত অনুমোদন',
+      'মাদ্রাসার সমস্ত তথ্য স্থায়ীভাবে মুছে ফেলার জন্য মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        localStorage.setItem('madrasah_students', '[]');
+        localStorage.setItem('madrasah_teachers', '[]');
+        localStorage.setItem('madrasah_attendance', '[]');
+        localStorage.setItem('madrasah_payments', '[]');
+        localStorage.setItem('madrasah_schedules', '[]');
+        localStorage.setItem('madrasah_notices', '[]');
+        localStorage.setItem('madrasah_sms_logs', '[]');
+        
+        setStudents([]);
+        setTeachers([]);
+        setAttendance([]);
+        setPayments([]);
+        setSchedules([]);
+        setNotices([]);
+        setSmsLogs([]);
+
+        realtimeSync.syncChange('madrasah_students', [], {
+          title: 'ডাটাবেজ সাফ করা হয়েছে',
+          message: 'মালিক কর্তৃক সমস্ত রেকর্ড মুছে ফেলা হয়েছে।',
+          module: 'general',
+          type: 'delete'
+        });
+        
+        window.location.reload();
+      },
+      'সম্পূর্ণ ডাটা মুছে ফেলুন'
+    );
+  };
+
+  const handleRestoreDemoDatabase = () => {
+    requireOwnerAuth(
+      'ডিফল্ট ডাটা পুনরুদ্ধার অনুমোদন',
+      'ডেমো ডাটা পুনরুদ্ধার করতে মালিকের পাসওয়ার্ড দিন।',
+      () => {
+        localStorage.removeItem('madrasah_students');
+        localStorage.removeItem('madrasah_teachers');
+        localStorage.removeItem('madrasah_attendance');
+        localStorage.removeItem('madrasah_payments');
+        localStorage.removeItem('madrasah_schedules');
+        localStorage.removeItem('madrasah_notices');
+        localStorage.removeItem('madrasah_sms_logs');
+        window.location.reload();
+      }
+    );
+  };
+
+  // Change Owner Master Password in Settings
+  const handleChangeOwnerPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changePassNew !== changePassConfirm) {
+      setChangePassMessage({ text: 'নতুন পাসওয়ার্ড দুটি মেলেনি!', isError: true });
+      return;
+    }
+    if (changePassNew.length < 4) {
+      setChangePassMessage({ text: 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!', isError: true });
+      return;
+    }
+
+    const res = await realtimeSync.changeOwnerPassword(changePassCurrent, changePassNew);
+    if (res.success) {
+      setAdminPassword(changePassNew);
+      setChangePassMessage({ text: 'মালিকের পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে!', isError: false });
+      setChangePassCurrent('');
+      setChangePassNew('');
+      setChangePassConfirm('');
+      setTimeout(() => setChangePassMessage(null), 4000);
+    } else {
+      setChangePassMessage({ text: res.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে!', isError: true });
+    }
+  };
+
+  // Notification actions
+  const handleMarkAllNotificationsRead = () => {
+    const updated = notifications.map(n => ({ ...n, isRead: true }));
+    setNotifications(updated);
+    localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
+  };
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
+    localStorage.setItem('madrasah_notifications', JSON.stringify([]));
+    fetch('/api/notifications/clear', { method: 'POST' }).catch(() => {});
   };
 
   // Quick Navigator modal triggers
@@ -503,6 +967,12 @@ export default function App() {
   const handleDashboardAddPaymentTrigger = (studentId?: string) => {
     setActiveTab('finance');
     setTriggerPaymentModal(studentId || true);
+  };
+
+  const handleOpenSettings = () => {
+    setIsPasswordPromptOpen(true);
+    setPasswordInput('');
+    setPasswordError('');
   };
 
   // Render correct panel component
@@ -634,7 +1104,7 @@ export default function App() {
           <StoreInventoryModule />
         );
       default:
-        return <div className="text-center py-10">অনুপলব্ধ বিভাগ!</div>;
+        return <div className="text-center py-10 font-sans">অনুপলব্ধ বিভাগ!</div>;
     }
   };
 
@@ -665,7 +1135,7 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       
       {/* Desktop Sidebar */}
-      <aside className="w-64 bg-emerald-900 text-white flex flex-col border-r border-emerald-800/50 shrink-0 hidden lg:flex">
+      <aside className="w-64 bg-emerald-900 text-white flex flex-col border-r border-emerald-800/50 shrink-0 hidden lg:flex font-sans">
         <div className="p-5 border-b border-emerald-800/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5 overflow-hidden">
@@ -679,22 +1149,28 @@ export default function App() {
                 </div>
               )}
               <div className="overflow-hidden">
-                <h1 className="text-xs font-extrabold tracking-tight truncate text-emerald-50" title={madrasahName}>{madrasahName}</h1>
-                <p className="text-[9px] text-emerald-350 uppercase tracking-widest font-bold">ম্যানেজমেন্ট পোর্টাল</p>
+                <h1 className="text-sm font-extrabold tracking-tight truncate leading-tight text-emerald-50">
+                  {madrasahName}
+                </h1>
+                <p className="text-[10px] text-emerald-350 tracking-wider font-semibold uppercase">
+                  ম্যানেজমেন্ট পোর্টাল
+                </p>
               </div>
             </div>
+            
             <button 
               onClick={handleOpenSettings}
-              className="p-1.5 rounded-lg bg-emerald-800/50 hover:bg-emerald-700 text-emerald-200 hover:text-white transition-colors cursor-pointer shrink-0"
-              title="মডেল সেটিংস"
-              id="desktop-settings-trigger"
+              className="p-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-200 hover:text-white transition-colors cursor-pointer shrink-0"
+              title="মাস্টার সেটিংস ও প্রোফাইল"
+              id="sidebar-settings-trigger"
             >
-              <Settings size={13} className="animate-spin-hover" />
+              <Settings size={15} />
             </button>
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {/* Navigation list */}
+        <nav className="flex-1 overflow-y-auto p-3.5 space-y-1">
           {navigationItems.map((item) => {
             const IconComponent = item.icon;
             const isActive = activeTab === item.key;
@@ -707,13 +1183,13 @@ export default function App() {
                   if (item.key !== 'students') setTriggerStudentModal(false);
                   if (item.key !== 'finance') setTriggerPaymentModal(false);
                 }}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive 
-                    ? 'bg-emerald-800 text-white shadow-md font-bold' 
-                    : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white'
+                    ? 'bg-emerald-800 text-white font-bold shadow-md shadow-emerald-950/20' 
+                    : 'text-emerald-100/90 hover:bg-emerald-800/40 hover:text-white'
                 }`}
               >
-                <IconComponent size={16} />
+                <IconComponent size={17} className={isActive ? 'text-white' : 'text-emerald-300'} />
                 <span>{item.label}</span>
               </button>
             );
@@ -722,7 +1198,7 @@ export default function App() {
 
         {/* Footer profile & server state details */}
         <div className="p-4 border-t border-emerald-800/50 space-y-2.5">
-          {/* Add to Home Screen shortcut banner with Dynamic Logo */}
+          {/* Add to Home Screen shortcut banner */}
           <button
             onClick={() => setIsShortcutModalOpen(true)}
             className="w-full flex items-center space-x-2.5 bg-gradient-to-r from-amber-500/15 via-emerald-800/20 to-emerald-800/40 hover:from-amber-500/25 hover:to-emerald-800/50 text-white rounded-xl p-2.5 border border-amber-500/30 transition-all text-left cursor-pointer group shadow-sm hover:shadow-md"
@@ -739,26 +1215,30 @@ export default function App() {
             </div>
           </button>
 
-          <div className="flex items-center space-x-2 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-800/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-[9px] font-medium text-emerald-250">সিস্টেম অনলাইন (লোকাল স্টোরেজ)</span>
+          {/* Real-time Multi-Device Sync Indicator */}
+          <div className="flex items-center justify-between bg-emerald-950/50 px-3 py-1.5 rounded-xl border border-emerald-800/30 text-[10px]">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-semibold text-emerald-200">লাইভ সিঙ্ক সক্রিয়</span>
+            </div>
+            <span className="text-[9px] text-emerald-350 font-mono">সকল ডিভাইসে</span>
           </div>
 
-          <div className="flex items-center space-x-3 px-3 py-2 bg-emerald-950 rounded-lg">
-            <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-sm font-sans select-none shrink-0">
+          <div className="flex items-center space-x-3 px-3 py-2 bg-emerald-950 rounded-xl">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-sm font-sans select-none shrink-0">
               {adminName ? adminName.charAt(0) : 'এ'}
             </div>
             <div className="text-xs overflow-hidden">
-              <p className="font-semibold text-white leading-none truncate" title={adminName}>{adminName}</p>
-              <p className="text-emerald-400 opacity-70 mt-1 text-[10px] truncate" title={adminTitle}>{adminTitle}</p>
+              <p className="font-bold text-white leading-none truncate" title={adminName}>{adminName}</p>
+              <p className="text-emerald-350 mt-1 text-[10px] truncate" title={adminTitle}>{adminTitle}</p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Mobile nav header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-emerald-900 border-b border-emerald-800 text-white flex items-center justify-between px-4 z-40 shadow-sm">
-        <div className="flex items-center space-x-2.5 overflow-hidden">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-emerald-900 border-b border-emerald-800 text-white flex items-center justify-between px-3 sm:px-4 z-40 shadow-sm font-sans">
+        <div className="flex items-center space-x-2 overflow-hidden">
           {madrasahLogoType === 'emblem' ? (
             <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center font-bold text-sm text-emerald-100 select-none shrink-0 font-serif">
               {madrasahInitialText}
@@ -775,6 +1255,15 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-1.5">
+          {/* Notification Center in Mobile */}
+          <NotificationCenter
+            notifications={notifications}
+            onMarkAllAsRead={handleMarkAllNotificationsRead}
+            onClearAll={handleClearAllNotifications}
+            currentToast={currentToast}
+            onDismissToast={() => setCurrentToast(null)}
+          />
+
           <button 
             onClick={handleOpenSettings}
             className="p-2 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition-colors"
@@ -783,6 +1272,7 @@ export default function App() {
           >
             <Settings size={15} />
           </button>
+          
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="p-2 rounded-lg bg-emerald-800 hover:bg-emerald-700 transition-colors"
@@ -801,14 +1291,19 @@ export default function App() {
       )}
 
       {/* Mobile Navigation Drawer Panel */}
-      <div className={`fixed top-14 bottom-0 left-0 w-64 bg-emerald-900 text-white border-r border-emerald-800/40 z-50 lg:hidden transform transition-transform duration-300 ease-in-out ${
+      <div className={`fixed top-14 bottom-0 left-0 w-64 bg-emerald-900 text-white border-r border-emerald-800/40 z-50 lg:hidden transform transition-transform duration-300 ease-in-out font-sans ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        <div className="py-6 px-4 space-y-6 h-full flex flex-col justify-between">
+        <div className="py-6 px-4 space-y-6 h-full flex flex-col justify-between overflow-y-auto">
           <div className="space-y-4">
-            <span className="text-[10px] uppercase font-bold text-emerald-200/75 tracking-widest pl-3 block">
-              মূল নেভিগেশন (মোবাইল)
-            </span>
+            <div className="flex items-center justify-between px-3">
+              <span className="text-[10px] uppercase font-bold text-emerald-200/75 tracking-widest block">
+                মূল মেন্যু
+              </span>
+              <span className="text-[9px] bg-emerald-800 text-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                লাইভ সিঙ্ক
+              </span>
+            </div>
             
             <nav className="space-y-1">
               {navigationItems.map((item) => {
@@ -824,7 +1319,7 @@ export default function App() {
                       if (item.key !== 'students') setTriggerStudentModal(false);
                       if (item.key !== 'finance') setTriggerPaymentModal(false);
                     }}
-                    className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isActive 
                         ? 'bg-emerald-800 text-white font-bold shadow-md' 
                         : 'text-emerald-100 hover:bg-emerald-800/40'
@@ -851,57 +1346,117 @@ export default function App() {
               </div>
               <div className="overflow-hidden">
                 <p className="text-xs font-bold text-amber-300 flex items-center gap-1.5 select-none text-[11px] !leading-normal">
-                  আজই হোম স্ক্রিনে যোগ করুন <Plus size={11} className="text-amber-300 shrink-0" />
+                  হোম স্ক্রিনে যোগ করুন <Plus size={11} className="text-amber-300 shrink-0" />
                 </p>
-                <p className="text-[9px] text-emerald-250 mt-0.5 leading-none font-medium text-[9px]">সুন্দর ও ঐতিহ্যবাহী লোগো সহ অ্যাপ</p>
+                <p className="text-[9px] text-emerald-250 mt-0.5 leading-none font-medium">লোগো সহ অ্যাপ ব্যবহার করুন</p>
               </div>
             </button>
           </div>
 
           <div className="pt-4 border-t border-emerald-800/40 text-[10px] text-emerald-300 text-center select-none font-sans">
-            {madrasahName} • সংস্করণ ৪.৩.০
+            {madrasahName} • স্বয়ংক্রিয় সিঙ্ক ও নোটিফিকেশন সিস্টেম
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden pt-14 lg:pt-0">
+      <main className="flex-1 flex flex-col overflow-hidden pt-14 lg:pt-0 font-sans">
         
         {/* Real Breadcrumb Header */}
-        <header className="h-16 bg-white border-b border-slate-200 shrink-0 flex items-center justify-between px-6 lg:px-8 shadow-xs z-30">
+        <header className="h-16 bg-white border-b border-slate-200 shrink-0 flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-xs z-30">
           <div className="flex items-center space-x-2 text-slate-500 text-xs font-semibold">
-            <span>মূল পাতা</span>
-            <span className="text-slate-300">/</span>
+            <span className="hidden sm:inline">মূল পাতা</span>
+            <span className="text-slate-300 hidden sm:inline">/</span>
             <span className="text-slate-900 font-bold bg-emerald-50 text-emerald-900 px-2.5 py-1 rounded-md">
-              {getTabLabelBangla(activeTab)} ওভারভিউ
+              {getTabLabelBangla(activeTab)}
             </span>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            
+            {/* Live Sync Status Indicator Badge */}
+            <div className="hidden sm:flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2.5 py-1 rounded-xl text-[10px] font-bold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="hidden md:inline">সকল ডিভাইসে</span>
+              <span>লাইভ সিঙ্ক চালু</span>
+            </div>
+
+            {/* Owner Security Status Badge (Lock / Unlock Toggle) */}
+            {isOwnerAuthorized ? (
+              <div className="flex items-center space-x-1.5 bg-emerald-900 text-white px-3 py-1.5 rounded-xl text-[10px] font-bold shadow-xs">
+                <Unlock size={12} className="text-emerald-300" />
+                <span className="hidden md:inline">মালিক মোড আনলক</span>
+                <button
+                  onClick={handleLockOwnerMode}
+                  className="ml-1 text-emerald-200 hover:text-white font-extrabold underline text-[10px] cursor-pointer"
+                  title="এখনই মালিক মোড লক করুন"
+                >
+                  (লক করুন)
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  requireOwnerAuth(
+                    'মালিক মোড আনলক করুন',
+                    'এই ডিভাইসে মালিকের এক্সেস ১৫ মিনিটের জন্য সক্রিয় করতে পাসওয়ার্ড দিন।',
+                    () => {
+                      const unlockToast: AppNotification = {
+                        id: `notif_${Date.now()}`,
+                        title: 'মালিক মোড আনলক হয়েছে',
+                        message: 'পরবর্তী ১৫ মিনিট পাসওয়ার্ড ছাড়া যেকোনো পরিবর্তন সরাসরি ফাইনাল করা যাবে।',
+                        module: 'settings',
+                        type: 'info',
+                        timestamp: new Date().toISOString(),
+                        isRead: false
+                      };
+                      setNotifications(prev => [unlockToast, ...prev]);
+                      setCurrentToast(unlockToast);
+                      playNotificationChime();
+                    },
+                    'আনলক করুন'
+                  );
+                }}
+                className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                title="মালিকের অনুমোদন পাসওয়ার্ড দিয়ে মোড আনলক করুন"
+              >
+                <Lock size={12} className="text-slate-500" />
+                <span className="hidden md:inline">লক করা</span>
+                <span className="text-emerald-800 font-bold ml-0.5">আনলক</span>
+              </button>
+            )}
+
+            {/* Centralized Notification Center in Desktop Header */}
+            <div className="hidden lg:block">
+              <NotificationCenter
+                notifications={notifications}
+                onMarkAllAsRead={handleMarkAllNotificationsRead}
+                onClearAll={handleClearAllNotifications}
+                currentToast={currentToast}
+                onDismissToast={() => setCurrentToast(null)}
+              />
+            </div>
+
+            {/* Settings Trigger */}
             <button
               onClick={handleOpenSettings}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-750 text-slate-750 text-xs font-bold py-1.5 px-3 rounded-lg border border-slate-200 transition-colors flex items-center space-x-1.5 cursor-pointer text-slate-705 text-slate-700"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1.5 px-3 rounded-xl border border-slate-200 transition-colors flex items-center space-x-1.5 cursor-pointer shadow-2xs"
               title="মাদ্রাসা কন্ট্রোল প্যানেল"
               id="header-settings-trigger"
             >
               <Settings size={13} />
-              <span className="hidden md:inline">সেটিংস ও কন্ট্রোল</span>
+              <span className="hidden md:inline">সেটিংস</span>
             </button>
 
+            {/* Quick Add Student */}
             <button 
               onClick={handleDashboardAddStudentTrigger}
-              className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-700 transition-colors flex items-center space-x-1.5 cursor-pointer"
+              className="bg-emerald-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-900 transition-colors flex items-center space-x-1.5 cursor-pointer"
             >
               <Users size={12} />
               <span className="hidden sm:inline">নতুন ছাত্র ভর্তি</span>
               <span className="sm:hidden">ভর্তি</span>
             </button>
-            <div className="text-right hidden lg:block border-l pl-4 border-slate-200">
-              <p className="text-[9px] text-slate-400">আজকের তারিখ</p>
-              <p className="text-xs font-bold text-slate-700">
-                {new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </p>
-            </div>
           </div>
         </header>
 
@@ -911,13 +1466,32 @@ export default function App() {
         </div>
       </main>
 
-      {/* Password Verification Modal */}
+      {/* Owner Confirmation Modal for any modification */}
+      <OwnerAuthModal
+        isOpen={isOwnerAuthModalOpen}
+        onClose={() => {
+          setIsOwnerAuthModalOpen(false);
+          setPendingOwnerAction(null);
+        }}
+        onSuccess={() => {
+          setIsOwnerAuthorized(true);
+          if (pendingOwnerAction?.action) {
+            pendingOwnerAction.action();
+            setPendingOwnerAction(null);
+          }
+        }}
+        title={pendingOwnerAction?.title}
+        description={pendingOwnerAction?.description}
+        actionButtonText={pendingOwnerAction?.actionButtonText}
+      />
+
+      {/* Password Verification Modal for Master Settings */}
       {isPasswordPromptOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="password-prompt-modal">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-150 w-full max-w-sm overflow-hidden flex flex-col animate-scale-up animate-fade-in">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="password-prompt-modal">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden flex flex-col">
             <div className="bg-emerald-900 text-white p-4 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
-                <Settings size={18} className="text-emerald-300 animate-spin-hover" />
+                <Settings size={18} className="text-emerald-300" />
                 <h3 className="font-bold text-sm font-sans">অ্যাডমিন প্রবেশাধিকার নিয়ন্ত্রণ</h3>
               </div>
               <button 
@@ -928,39 +1502,41 @@ export default function App() {
               </button>
             </div>
 
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              if (passwordInput === adminPassword) {
+              const isValid = await realtimeSync.verifyOwnerPassword(passwordInput);
+              if (isValid) {
                 setIsPasswordPromptOpen(false);
                 setIsSettingsModalOpen(true);
                 setPasswordError('');
+                setPasswordInput('');
               } else {
-                setPasswordError('ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।');
+                setPasswordError('ভুল পাসওয়ার্ড! শুধুমাত্র মালিকের পাসওয়ার্ড দিয়ে প্রবেশ করতে পারবেন।');
               }
             }} className="p-6 space-y-4 text-slate-700 text-xs font-sans">
               <div className="text-center py-2">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Settings size={22} />
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <ShieldCheck size={24} />
                 </div>
-                <h4 className="font-extrabold text-slate-800 text-sm">মাস্টার কন্ট্রোল অ্যাক্সেস লক</h4>
-                <p className="text-[10px] text-slate-500 mt-1">মাদ্রাসার প্রাথমিক বিবরণী, লোগো বা ডেমো ডাটা সাফ করার সেটিংস অ্যাক্সেস করতে পাসওয়ার্ড দিন।</p>
+                <h4 className="font-extrabold text-slate-800 text-sm">মাস্টার সেটিংস লক</h4>
+                <p className="text-[10px] text-slate-500 mt-1">মাদ্রাসার প্রাথমিক বিবরণী, লোগো বা মাস্টার পাসওয়ার্ড পরিবর্তন করতে মালিকের পাসওয়ার্ড দিন।</p>
               </div>
 
               <div>
-                <label className="block text-slate-500 font-semibold mb-1">অ্যাডমিন পাসওয়ার্ড লিখুন:</label>
+                <label className="block text-slate-600 font-semibold mb-1">মালিকের পাসওয়ার্ড লিখুন:</label>
                 <input 
                   type="password" 
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-center outline-none focus:border-emerald-600 transition-colors tracking-widest text-slate-800 font-bold font-mono text-sm"
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-center outline-none focus:border-emerald-600 transition-colors tracking-widest text-slate-800 font-bold font-mono text-sm bg-slate-50/50 focus:bg-white"
                   placeholder="••••••••"
                   autoFocus
                 />
                 {passwordError && (
-                  <p className="text-red-600 font-bold mt-1.5 text-center text-[10px] animate-bounce">{passwordError}</p>
+                  <p className="text-rose-600 font-bold mt-1.5 text-center text-[10px]">{passwordError}</p>
                 )}
                 <p className="text-[9px] text-slate-400 mt-2.5 text-center leading-relaxed">
-                  পরীক্ষার জন্য ডিফল্ট পাসওয়ার্ড: <span className="font-mono bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded">admin123</span>
+                  ডিফল্ট পাসওয়ার্ড: <span className="font-mono bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded">admin123</span>
                 </p>
               </div>
 
@@ -974,9 +1550,9 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  className="w-1/2 bg-emerald-800 hover:bg-emerald-900 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
                 >
-                  নিশ্চিত করুন
+                  প্রবেশ করুন
                 </button>
               </div>
             </form>
@@ -986,23 +1562,89 @@ export default function App() {
 
       {/* Madrasah Settings Modal */}
       {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="madrasah-settings-modal">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-150 w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-scale-up">
-            <div className="bg-emerald-900 text-white p-4 flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="madrasah-settings-modal">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-emerald-900 text-white p-4.5 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
                 <Settings size={18} className="text-emerald-300" />
-                <h3 className="font-bold text-sm font-sans">মাদ্রাসা প্রোফাইল ও মাস্টার সেটিংস</h3>
+                <h3 className="font-bold text-sm font-sans">মাদ্রাসা প্রোফাইল ও মাস্টার সিকিউরিটি সেটিংস</h3>
               </div>
               <button 
                 onClick={() => setIsSettingsModalOpen(false)}
-                className="text-white/80 hover:text-white bg-emerald-800 hover:bg-emerald-700 p-1 rounded-lg transition-colors cursor-pointer"
+                className="text-white/80 hover:text-white bg-emerald-800 hover:bg-emerald-700 p-1 rounded-xl transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5 text-slate-700 text-xs font-sans">
+            <div className="p-6 overflow-y-auto space-y-6 text-slate-700 text-xs font-sans">
               
+              {/* SPECIAL SECTION: Owner Password Changer */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4.5 space-y-3.5">
+                <div className="flex items-center space-x-2">
+                  <KeyRound size={16} className="text-emerald-800" />
+                  <h4 className="font-black text-emerald-950 text-xs">
+                    মালিকের মাস্টার পাসওয়ার্ড পরিবর্তন
+                  </h4>
+                </div>
+                <p className="text-[11px] text-emerald-900 leading-relaxed">
+                  এই পাসওয়ার্ডটি দিয়ে যেকোনো তথ্য ফাইনাল অনুমোদন করা হয়। শুধুমাত্র মালিক/মুহতামিম এই পাসওয়ার্ডটি জানবেন।
+                </p>
+
+                <form onSubmit={handleChangeOwnerPasswordSubmit} className="space-y-3">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">বর্তমান পাসওয়ার্ড:</label>
+                    <input
+                      type="password"
+                      value={changePassCurrent}
+                      onChange={(e) => setChangePassCurrent(e.target.value)}
+                      placeholder="বর্তমান পাসওয়ার্ড লিখুন..."
+                      className="w-full border border-slate-200 rounded-xl p-2 text-xs bg-white outline-none focus:border-emerald-600 font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">নতুন পাসওয়ার্ড:</label>
+                      <input
+                        type="password"
+                        value={changePassNew}
+                        onChange={(e) => setChangePassNew(e.target.value)}
+                        placeholder="নতুন পাসওয়ার্ড..."
+                        className="w-full border border-slate-200 rounded-xl p-2 text-xs bg-white outline-none focus:border-emerald-600 font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">পাসওয়ার্ড নিশ্চিত করুন:</label>
+                      <input
+                        type="password"
+                        value={changePassConfirm}
+                        onChange={(e) => setChangePassConfirm(e.target.value)}
+                        placeholder="পুনরায় লিখুন..."
+                        className="w-full border border-slate-200 rounded-xl p-2 text-xs bg-white outline-none focus:border-emerald-600 font-mono"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {changePassMessage && (
+                    <div className={`p-2 rounded-xl text-[11px] font-bold ${changePassMessage.isError ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'}`}>
+                      {changePassMessage.text}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <Check size={14} />
+                    <span>পাসওয়ার্ড আপডেট ও সংরক্ষণ করুন</span>
+                  </button>
+                </form>
+              </div>
+
               {/* Section 1: Name and Slogan */}
               <div className="space-y-3.5">
                 <h4 className="font-extrabold text-emerald-800 border-b border-slate-100 pb-1.5 flex items-center shrink-0">
@@ -1016,7 +1658,12 @@ export default function App() {
                     value={madrasahName}
                     onChange={(e) => {
                       setMadrasahName(e.target.value);
-                      localStorage.setItem('madrasah_profile_name', e.target.value);
+                      realtimeSync.syncChange('madrasah_profile_name', e.target.value, {
+                        title: 'মাদ্রাসার নাম আপডেট',
+                        message: `মাদ্রাসার নাম "${e.target.value}" হিসেবে হালনাগাদ করা হয়েছে।`,
+                        module: 'settings',
+                        type: 'update'
+                      });
                     }}
                     className="w-full border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-600 transition-colors text-slate-800 font-bold"
                     placeholder="যেমন: দারুল উলুম মাদ্রাসা"
@@ -1030,7 +1677,12 @@ export default function App() {
                     value={madrasahSlogan}
                     onChange={(e) => {
                       setMadrasahSlogan(e.target.value);
-                      localStorage.setItem('madrasah_profile_slogan', e.target.value);
+                      realtimeSync.syncChange('madrasah_profile_slogan', e.target.value, {
+                        title: 'স্লোগান ও ঠিকানা আপডেট',
+                        message: `স্লোগান "${e.target.value}" হিসেবে আপডেট করা হয়েছে।`,
+                        module: 'settings',
+                        type: 'update'
+                      });
                     }}
                     className="w-full border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-600 transition-colors text-slate-700"
                     placeholder="যেমন: মিরপুর, ঢাকা • প্রতিষ্ঠিত ২০০২ ইং"
@@ -1163,31 +1815,16 @@ export default function App() {
                     />
                   </div>
                 </div>
-
-                <div className="pt-2">
-                  <label className="block text-slate-500 font-semibold mb-1">সেটিংস সিকিউরিটি পাসওয়ার্ড *</label>
-                  <input 
-                    type="text" 
-                    value={adminPassword}
-                    onChange={(e) => {
-                      setAdminPassword(e.target.value);
-                      localStorage.setItem('madrasah_admin_password', e.target.value);
-                    }}
-                    className="w-full border border-slate-200 rounded-xl p-2.5 outline-none focus:border-emerald-600 transition-colors text-slate-800 font-mono font-bold"
-                    placeholder="পাসওয়ার্ড লিখুন"
-                  />
-                  <p className="text-[9px] text-slate-400 mt-1">ভবিষ্যতে মাস্টার সেটিংস প্রবেশদ্বার সুরক্ষিত রাখতে এই পাসওয়ার্ডটি ব্যবহার হবে।</p>
-                </div>
               </div>
 
-              {/* Section 4: Sandboxed Demo Data Actions */}
+              {/* Section 4: Data Actions */}
               <div className="space-y-3 bg-red-50/40 border border-red-150 rounded-2xl p-4 shrink-0 font-sans">
                 <h5 className="font-bold text-red-800 flex items-center space-x-1.5">
                   <Trash2 size={13} className="shrink-0 text-red-650" />
                   <span>তথ্যসমূহ সাফকরণ ও কন্ট্রোল প্যানেল</span>
                 </h5>
                 <p className="text-[10px] text-slate-500 leading-relaxed">
-                  মাদ্রাসার সমস্ত ডেমো ডাটা (শিক্ষার্থী, শিক্ষক, নোটিশ, রুটিন ইত্যাদি) এক ক্লিকে মুছে ফেলে কাজ শুরু করতে পারেন। কোনো ভুল হলে পুনরায় ডেমো ডাটা রিস্টোরও করতে পারবেন।
+                  মাদ্রাসার সমস্ত ডেমো ডাটা (শিক্ষার্থী, শিক্ষক, নোটিশ, রুটিন ইত্যাদি) এক ক্লিকে মুছে ফেলে কাজ শুরু করতে পারেন।
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
                   <button
@@ -1222,20 +1859,19 @@ export default function App() {
         </div>
       )}
 
-      {/* PWA Home Screen Shortcut Modal WITH Premium Logo Preview & SmartMockup */}
+      {/* PWA Home Screen Shortcut Modal */}
       {isShortcutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="shortcut-helper-modal">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-150 w-full max-w-lg overflow-hidden flex flex-col md:max-h-[92vh] max-h-[95vh] animate-scale-up">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="shortcut-helper-modal">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col md:max-h-[92vh] max-h-[95vh]">
             
-            {/* Modal Header */}
             <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-teal-950 text-white p-4 flex items-center justify-between shrink-0 border-b border-emerald-800/40">
               <div className="flex items-center space-x-2.5">
                 <div className="w-7 h-7 rounded-lg bg-emerald-800 flex items-center justify-center border border-amber-400/40 animate-pulse">
                   <Smartphone size={15} className="text-amber-300" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm font-sans tracking-wide">নতুন লোগো সহ হোম স্ক্রিনে যোগ করুন</h3>
-                  <p className="text-[9px] text-emerald-300 leading-none mt-0.5 font-sans">মাদ্রাসা অ্যাপটি মোবাইল স্ক্রিনে সেট করুন</p>
+                  <h3 className="font-extrabold text-sm font-sans tracking-wide">লোগো সহ হোম স্ক্রিনে যোগ করুন</h3>
+                  <p className="text-[9px] text-emerald-300 leading-none mt-0.5 font-sans">মোবাইল বা পিসিতে ইনস্টল করুন</p>
                 </div>
               </div>
               <button 
@@ -1246,174 +1882,50 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-5 text-slate-700 text-xs font-sans leading-relaxed">
-              
-              {/* Main Premium Announcement with Circular Logo */}
-              <div className="bg-gradient-to-br from-emerald-50 to-amber-50/40 border border-emerald-150 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left shadow-2xs">
-                
-                {/* Embedded Premium Logo */}
-                <div className="relative group shrink-0">
-                  <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-400 to-emerald-600 rounded-full blur-sm opacity-60 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
-                  <div className="relative w-16 h-16 rounded-full bg-emerald-950 border-2 border-amber-400 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
-                    <img src="/public/logo.svg" className="w-13 h-13 object-contain" alt="মাদ্রাসা লোগো" referrerPolicy="no-referrer" />
-                  </div>
+              <div className="flex items-center space-x-4 bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/80">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-900 border-2 border-amber-400/70 shadow-md flex items-center justify-center shrink-0">
+                  <img src="/public/logo.svg" className="w-10 h-10 object-contain" alt="App Icon" referrerPolicy="no-referrer" />
                 </div>
-
-                <div className="space-y-1.5">
-                  <h4 className="font-extrabold text-slate-800 text-sm">{madrasahName} আইকন ও লোগো</h4>
-                  <p className="text-slate-600 leading-normal text-[11px] font-sans">
-                    আমাদের এই অ্যাপ্লিকেশনে একটি অত্যন্ত রমনীয় ও ঐতিহ্যবাহী সবুজ-সোনালী মার্জিত ইসলামী লোগো (খিলান গম্বুজ, কুরআনের রেহাল ও গাইড) যুক্ত করা হয়েছে। এটি শর্টকাট হিসেবে আপনার মোবাইল স্ক্রিনে দারুণ দেখাবে!
-                  </p>
+                <div>
+                  <h4 className="font-bold text-sm text-emerald-950">{madrasahName}</h4>
+                  <p className="text-[11px] text-emerald-800 font-medium">অফিশিয়াল মাদ্রাসা ম্যানেজমেন্ট ওয়েব অ্যাপ</p>
+                  <p className="text-[10px] text-slate-500 mt-1">সব ডিভাইসে স্বয়ংক্রিয় লাইভ সিঙ্ক সহ ইনস্টল হবে।</p>
                 </div>
               </div>
 
-              {/* Interactive Phone Homescreen Mockup Visualizer */}
-              <div className="border border-slate-150 rounded-2xl bg-slate-50 p-4">
-                <span className="text-[10px] font-extrabold text-slate-450 tracking-wider uppercase block text-center mb-3">
-                  মোবাইল স্ক্রিনে শর্টকাটটির রূপরেখা (পদ্ধতিগত ডেমো)
-                </span>
-                
-                <div className="flex justify-center">
-                  {/* Smartphone Container */}
-                  <div className="w-52 h-64 rounded-[32px] border-4 border-slate-800 bg-slate-900 overflow-hidden relative shadow-md flex flex-col justify-between p-3 select-none">
-                    
-                    {/* Phone Top Speaker/Camera notch */}
-                    <div className="absolute top-1 left-1/2 -translate-x-1/2 w-16 h-3.5 bg-slate-800 rounded-full z-10 flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900 border border-slate-700"></div>
-                    </div>
-
-                    {/* Phone Home Top Panel */}
-                    <div className="flex justify-between items-center text-[7px] text-white/90 px-2 pt-0.5 font-mono font-bold">
-                      <span>১০:৩০</span>
-                      <div className="flex items-center space-x-1">
-                        <span>📶</span>
-                        <span>🔋 ৯৮%</span>
-                      </div>
-                    </div>
-
-                    {/* Smartphone Home Screen Desktop Apps Grid */}
-                    <div className="grid grid-cols-3 gap-y-3 gap-x-1 py-3 px-1 max-w-full overflow-hidden shrink-0 text-center text-[7px] text-white/90 font-medium">
-                      
-                      {/* System App 1 */}
-                      <div className="flex flex-col items-center space-y-0.5">
-                        <div className="w-7 h-7 rounded-xl bg-blue-500 flex items-center justify-center text-xs shadow-sm">📞</div>
-                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">ফোন</span>
-                      </div>
-
-                      {/* System App 2 */}
-                      <div className="flex flex-col items-center space-y-0.5">
-                        <div className="w-7 h-7 rounded-xl bg-orange-500 flex items-center justify-center text-xs shadow-sm">✉️</div>
-                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">মেসেজ</span>
-                      </div>
-
-                      {/* System App 3 */}
-                      <div className="flex flex-col items-center space-y-0.5">
-                        <div className="w-7 h-7 rounded-xl bg-sky-500 flex items-center justify-center text-xs shadow-sm">📷</div>
-                        <span className="truncate max-w-full opacity-80 font-semibold text-[7.5px]">ক্যামেরা</span>
-                      </div>
-
-                      {/* OUR MADRASAH PWA COMPONENT */}
-                      <div className="flex flex-col items-center space-y-0.5 relative col-span-3 py-1 bg-white/10 rounded-2xl border border-amber-400/30 shadow-xs animate-pulse">
-                        <div className="absolute -top-1 -right-0.5 bg-red-600 text-white font-bold text-[7px] rounded-full w-4 h-4 flex items-center justify-center shadow-md animate-bounce">১</div>
-                        
-                        {/* Real SVG Logo Thumbnail */}
-                        <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-amber-400 flex items-center justify-center shadow-lg pointer-events-none shrink-0 overflow-hidden">
-                          <img src="/public/logo.svg" className="w-6 h-6 object-contain" alt="M" referrerPolicy="no-referrer" />
-                        </div>
-                        <span className="font-extrabold text-[8px] text-amber-300 drop-shadow-md truncate max-w-[90px] leading-tight block">{madrasahName}</span>
-                        <div className="text-[6px] bg-emerald-600/95 text-white px-1 py-0.2 rounded-full font-bold">হোম শর্টকাট</div>
-                      </div>
-
-                    </div>
-
-                    {/* Phone Desktop Dock area */}
-                    <div className="bg-white/20 backdrop-blur-md rounded-2xl p-1 grid grid-cols-3 gap-1 text-center shrink-0">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-650 flex items-center justify-center mx-auto shadow-inner text-[10px]">💬</div>
-                      <div className="w-7 h-7 rounded-lg bg-red-500 flex items-center justify-center mx-auto shadow-inner text-[10px]">🗺️</div>
-                      <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center mx-auto shadow-inner text-[10px]">🧭</div>
-                    </div>
-
-                  </div>
-                </div>
-              </div>
-
-              {/* Action trigger: Dynamic installation or helper instructions */}
               {deferredPrompt ? (
-                <div className="bg-emerald-50 border border-emerald-250 p-4 rounded-xl text-center space-y-2 shrink-0">
-                  <h5 className="font-extrabold text-emerald-900 text-sm">সরাসরি যুক্ত করার অপশন উপলব্ধ!</h5>
-                  <p className="text-[11px] text-emerald-800">আপনার ডিভাইসটি সরাসরি শর্টকাট ইনস্টল করার সুবিধা সমর্থন করে। নিচের বোতামে চাপ দিন:</p>
-                  
-                  <button
-                    onClick={async () => {
-                      if (deferredPrompt) {
-                        deferredPrompt.prompt();
-                        const { outcome } = await deferredPrompt.userChoice;
-                        if (outcome === 'accepted') {
-                          setIsSuccessfullyInstalled(true);
-                          setDeferredPrompt(null);
-                        }
-                      }
-                    }}
-                    className="w-full sm:w-auto bg-emerald-650 hover:bg-emerald-700 text-white font-extrabold px-6 py-2.5 rounded-xl border border-emerald-600 shadow-md transition-all flex items-center justify-center space-x-2 mx-auto cursor-pointer animate-bounce text-xs"
-                  >
-                    <Download size={13} className="text-white shrink-0 animate-pulse" />
-                    <span>আমার হোম স্ক্রিনে লোগো সহ যুক্ত করুন</span>
-                  </button>
-                </div>
+                <button
+                  onClick={async () => {
+                    deferredPrompt.prompt();
+                    const choiceResult = await deferredPrompt.userChoice;
+                    if (choiceResult.outcome === 'accepted') {
+                      setIsSuccessfullyInstalled(true);
+                      setDeferredPrompt(null);
+                    }
+                  }}
+                  className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-3 rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 text-xs cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>এখনই সরাসরি হোম স্ক্রিনে ইনস্টল করুন</span>
+                </button>
               ) : (
-                <div className="space-y-4">
-                  {/* Detailed Step-by-Step Instructions Tabs */}
-                  <div className="bg-emerald-50/40 border border-emerald-150 rounded-2xl p-4">
-                    <h5 className="font-extrabold text-slate-800 text-xs mb-3 text-center border-b pb-2 border-emerald-100">ইনস্টল করার সহজ নির্দেশনাবলী:</h5>
-
-                    <div className="grid grid-cols-2 gap-3.5">
-                      <div className="bg-white/95 border border-emerald-200/50 p-3 rounded-2xl text-center space-y-1">
-                        <span className="font-extrabold text-[11px] text-emerald-800 flex items-center justify-center gap-1 leading-none select-none">
-                          🤖 অ্যান্ড্রয়েড (Chrome)
-                        </span>
-                        <div className="text-[10px] text-slate-550 pt-1 text-left space-y-1.5 leading-normal">
-                          <p><b className="text-emerald-700 font-mono">১.</b> উপরে ডান কোণার <b>তিনটি ডট (⋮)</b> অপশনে ট্যাপ করুন।</p>
-                          <p><b className="text-emerald-700 font-mono">২.</b> <b>"Add to Home screen"</b> বা <b>"ইনস্টল করুন"</b> লেখাতে দিন।</p>
-                          <p><b className="text-emerald-700 font-mono">৩.</b> মাদ্রাসা লোগো সহ শর্টকাটটি স্ক্রিনে যুক্ত হবে!</p>
-                        </div>
-                      </div>
-
-                      <div className="bg-white/95 border border-emerald-200/50 p-3 rounded-2xl text-center space-y-1">
-                        <span className="font-extrabold text-[11px] text-emerald-800 flex items-center justify-center gap-1 leading-none select-none">
-                          🍎 আইফোন (Safari)
-                        </span>
-                        <div className="text-[10px] text-slate-550 pt-1 text-left space-y-1.5 leading-normal">
-                          <p><b className="text-emerald-700 font-mono">১.</b> নিচে থাকা <b>শেয়ার (Share)</b> আইকনে চাপ দিন।</p>
-                          <p><b className="text-emerald-700 font-mono">২.</b> একটু স্ক্রল করে <b>"Add to Home Screen"</b> লেখাটি ট্যাপ করুন।</p>
-                          <p><b className="text-emerald-700 font-mono">৩.</b> উপরে ডান কোণার <b>"Add"</b> দিলে লোগো সহ সেট হবে!</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <p className="text-[9.5px] text-slate-400 text-center leading-normal mt-3 font-sans">
-                      নোট: যেকোনো ব্রাউজার থেকেই এই শর্টকাট হোম স্ক্রিনে সেট করলে কোনো ইন্টারনেট লোডিং ছাড়াই মূল অ্যাপের মত দ্রুত ব্যবহার করতে পারবেন।
-                    </p>
-                  </div>
+                <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <h5 className="font-bold text-slate-800 text-xs">ম্যানুয়ালি হোম স্ক্রিনে যোগ করার নিয়ম:</h5>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                    <li><strong>অ্যান্ড্রয়েড / ক্রোম:</strong> ব্রাউজারের উপরে ৩-ডট মেন্যুতে ক্লিক করে "Add to Home screen" বা "Install App" চাপুন।</li>
+                    <li><strong>আইফোন / সাফারি:</strong> নিচে শেয়ার (Share) আইকনে ক্লিক করে "Add to Home Screen" নির্বাচন করুন।</li>
+                  </ul>
                 </div>
               )}
-
-              {isSuccessfullyInstalled && (
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center font-bold text-emerald-800 animate-pulse text-[10px]">
-                  ✓ অভিনন্দন! শর্টকাট ইনস্টলেশন প্রক্রিয়া সফল হয়েছে এবং আপনার হোম স্ক্রিনে মাদ্রাসা লোগোটি যুক্ত হয়েছে।
-                </div>
-              )}
-
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-              <span className="text-[9px] text-slate-400 font-bold font-sans">সংস্করণ ৪.৩.০ • {madrasahName}</span>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
               <button
                 onClick={() => setIsShortcutModalOpen(false)}
-                className="bg-emerald-800 hover:bg-emerald-950 text-white font-bold py-2 px-6 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-5 rounded-xl text-xs transition-all cursor-pointer"
               >
-                বন্ধ করুন
+                ঠিক আছে
               </button>
             </div>
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Student, ExamMark, MadrasahClass, isClassMatch, SubjectScore, GradeRule } from '../types';
+import { realtimeSync } from '../services/realtimeSync';
+import OwnerAuthModal from './OwnerAuthModal';
 import { 
   Award, 
   FileSpreadsheet, 
@@ -326,33 +328,85 @@ export default function ExamModule({ students }: ExamModuleProps) {
     }
   }, [students]);
 
-  // Save marks to state and localStorage
+  // Save marks to state and localStorage with Real-Time sync
   const saveMarks = (list: ExamMark[]) => {
     setExamMarks(list);
-    localStorage.setItem('madrasah_exam_marks', JSON.stringify(list));
+    realtimeSync.syncChange('madrasah_exam_marks', list, {
+      title: 'পরীক্ষার ফলাফল হালনাগাদ',
+      message: 'শিক্ষার্থীদের পরীক্ষার নম্বর ও গ্রেড ডাটাবেজে সংরক্ষিত হয়েছে।',
+      module: 'exam',
+      type: 'update'
+    });
   };
 
-  // Save class subjects map to state and localStorage
+  // Save class subjects map to state and localStorage with Real-Time sync
   const saveClassSubjects = (newMap: Record<string, string[]>) => {
     setClassSubjectsMap(newMap);
-    localStorage.setItem('madrasah_class_subjects', JSON.stringify(newMap));
+    realtimeSync.syncChange('madrasah_class_subjects', newMap, {
+      title: 'শ্রেণীভিত্তিক বিষয় তালিকা সংরক্ষিত',
+      message: 'সকল শ্রেণীর বিষয় তালিকা আপডেট হয়েছে।',
+      module: 'exam',
+      type: 'update'
+    });
   };
 
-  // Save grading rules
+  // Save grading rules with Real-Time sync
   const saveGradingRules = (newRules: GradeRule[]) => {
     setGradingRules(newRules);
-    localStorage.setItem('madrasah_grading_rules', JSON.stringify(newRules));
+    realtimeSync.syncChange('madrasah_grading_rules', newRules, {
+      title: 'গ্রেডিং কনফিগারেশন সংরক্ষিত',
+      message: 'গড় নাম্বারের গ্রেড বণ্টন নিয়ম হালনাগাদ হয়েছে।',
+      module: 'exam',
+      type: 'update'
+    });
 
     // Re-evaluate all existing marks with new grading configuration rules
     setExamMarks(prev => {
       const recalculated = prev.map(m => normalizeExamMark(m, newRules));
-      localStorage.setItem('madrasah_exam_marks', JSON.stringify(recalculated));
+      realtimeSync.syncChange('madrasah_exam_marks', recalculated, {
+        title: 'ফলাফল পুনর্মূল্যায়ন সম্পন্ন',
+        message: 'নতুন গ্রেডিং নীতি অনুযায়ী ফলাফল আপডেট হয়েছে।',
+        module: 'exam',
+        type: 'update'
+      });
       return recalculated;
     });
 
     setShowConfigSavedToast(true);
     setTimeout(() => setShowConfigSavedToast(false), 3500);
   };
+
+  // Owner Auth state for Exam Module
+  const [isOwnerAuthOpen, setIsOwnerAuthOpen] = useState(false);
+  const [pendingAuthAction, setPendingAuthAction] = useState<{
+    title: string;
+    description: string;
+    action: () => void;
+  } | null>(null);
+
+  const requireExamOwnerAuth = (title: string, description: string, action: () => void) => {
+    const expire = localStorage.getItem('madrasah_owner_auth_expire');
+    if (expire && parseInt(expire, 10) > Date.now()) {
+      action();
+      return;
+    }
+    setPendingAuthAction({ title, description, action });
+    setIsOwnerAuthOpen(true);
+  };
+
+  // Subscribe to real-time events from other devices
+  useEffect(() => {
+    const unsub = realtimeSync.subscribe((event) => {
+      if (event.key === 'madrasah_exam_marks' && Array.isArray(event.data)) {
+        setExamMarks(event.data);
+      } else if (event.key === 'madrasah_grading_rules' && Array.isArray(event.data)) {
+        setGradingRules(event.data);
+      } else if (event.key === 'madrasah_class_subjects' && event.data) {
+        setClassSubjectsMap(event.data);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Available classes list (from students + pre-configured classes)
   const availableClasses = useMemo(() => {
@@ -432,51 +486,57 @@ export default function ExamModule({ students }: ExamModuleProps) {
     };
   }, [formSubjectScores, gradingRules]);
 
-  // Handle Form Submit (Add or Edit)
+  // Handle Form Submit (Add or Edit) with Owner Authentication
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const st = students.find(s => s.id === formStudentId);
     if (!st) return;
 
-    const total = formCalculations.total;
-    const average = formCalculations.average;
-    const grade = formCalculations.gradeInfo.grade;
+    requireExamOwnerAuth(
+      editingMark ? 'ফলাফল সংশোধন অনুমোদন' : 'ফলাফল সংরক্ষণ অনুমোদন',
+      `শিক্ষার্থী "${st.name}" এর পরীক্ষার ফলাফল ফাইনাল ও ডেটাবেজে সংরক্ষণ করতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const total = formCalculations.total;
+        const average = formCalculations.average;
+        const grade = formCalculations.gradeInfo.grade;
 
-    if (editingMark) {
-      const updated = examMarks.map(item => item.id === editingMark.id ? {
-        ...item,
-        studentId: formStudentId,
-        studentName: st.name,
-        roll: st.roll,
-        gradeClass: formClass,
-        examType: formExamType,
-        subjectScores: formSubjectScores,
-        totalMarks: total,
-        averageMarks: average,
-        grade
-      } : item);
-      saveMarks(updated);
-    } else {
-      const newResult: ExamMark = {
-        id: 'ex-' + Math.random().toString(36).substr(2, 9),
-        studentId: formStudentId,
-        studentName: st.name,
-        roll: st.roll,
-        gradeClass: formClass,
-        examType: formExamType,
-        subjectScores: formSubjectScores,
-        totalMarks: total,
-        averageMarks: average,
-        grade
-      };
-      saveMarks([newResult, ...examMarks]);
-    }
+        if (editingMark) {
+          const updated = examMarks.map(item => item.id === editingMark.id ? {
+            ...item,
+            studentId: formStudentId,
+            studentName: st.name,
+            roll: st.roll,
+            gradeClass: formClass,
+            examType: formExamType,
+            subjectScores: formSubjectScores,
+            totalMarks: total,
+            averageMarks: average,
+            grade
+          } : item);
+          saveMarks(updated);
+        } else {
+          const newResult: ExamMark = {
+            id: 'ex-' + Math.random().toString(36).substr(2, 9),
+            studentId: formStudentId,
+            studentName: st.name,
+            roll: st.roll,
+            gradeClass: formClass,
+            examType: formExamType,
+            subjectScores: formSubjectScores,
+            totalMarks: total,
+            averageMarks: average,
+            grade
+          };
+          saveMarks([newResult, ...examMarks]);
+        }
 
-    // Reset & close
-    setIsModalOpen(false);
-    setEditingMark(null);
-    setFormStudentId('');
-    setNewSubjectInput('');
+        // Reset & close
+        setIsModalOpen(false);
+        setEditingMark(null);
+        setFormStudentId('');
+        setNewSubjectInput('');
+      }
+    );
   };
 
   // Open Edit Modal
@@ -490,10 +550,17 @@ export default function ExamModule({ students }: ExamModuleProps) {
     setIsModalOpen(true);
   };
 
-  // Delete mark
+  // Delete mark with Owner Authentication
   const handleDelete = (id: string) => {
-    const updated = examMarks.filter(item => item.id !== id);
-    saveMarks(updated);
+    const target = examMarks.find(m => m.id === id);
+    requireExamOwnerAuth(
+      'ফলাফল মুছে ফেলার অনুমোদন',
+      `শিক্ষার্থী "${target?.studentName || ''}" এর পরীক্ষার ফলাফল ডাটাবেজ থেকে মুছে ফেলতে মালিকের পাসওয়ার্ড দিন।`,
+      () => {
+        const updated = examMarks.filter(item => item.id !== id);
+        saveMarks(updated);
+      }
+    );
   };
 
   // Open Print Modal
@@ -1774,6 +1841,23 @@ export default function ExamModule({ students }: ExamModuleProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Owner Auth Modal for Exam Finalization */}
+      <OwnerAuthModal
+        isOpen={isOwnerAuthOpen}
+        onClose={() => {
+          setIsOwnerAuthOpen(false);
+          setPendingAuthAction(null);
+        }}
+        onSuccess={() => {
+          if (pendingAuthAction?.action) {
+            pendingAuthAction.action();
+            setPendingAuthAction(null);
+          }
+        }}
+        title={pendingAuthAction?.title}
+        description={pendingAuthAction?.description}
+      />
 
     </div>
   );
