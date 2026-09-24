@@ -231,9 +231,11 @@ class RealtimeSyncManager {
       this.isCurrentlySyncing = true;
       this.broadcastStatus();
       const res = await fetch('/api/data');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const json = await res.json();
         if (json.success && json.data) {
+          this.isConnectedToServer = true;
           this.lastServerTimestamp = json.lastUpdated || '';
           this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
           this.applyFullServerData(json.data, true);
@@ -247,28 +249,30 @@ class RealtimeSyncManager {
     }
   }
 
-  // 5. Periodic polling fallback every 4 seconds to guarantee zero missed updates
+  // 5. Periodic polling fallback every 3.5 seconds to guarantee zero missed updates
   private initFallbackPolling() {
     if (typeof window === 'undefined') return;
 
     this.fallbackPollingInterval = setInterval(async () => {
       try {
         const res = await fetch('/api/data');
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const json = await res.json();
+          this.isConnectedToServer = true;
           if (json.success && json.lastUpdated && json.lastUpdated !== this.lastServerTimestamp) {
             this.lastServerTimestamp = json.lastUpdated;
             this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
             if (json.data) {
               this.applyFullServerData(json.data, false);
             }
-            this.broadcastStatus();
           }
+          this.broadcastStatus();
         }
       } catch (e) {
         // network glitch
       }
-    }, 4000);
+    }, 3500);
   }
 
   // Apply server data into localStorage and trigger listeners
@@ -595,6 +599,84 @@ class RealtimeSyncManager {
   // Status check
   public isConnected(): boolean {
     return this.isConnectedToServer;
+  }
+
+  // Owner Authorization & Device Recognition
+  public isOwnerDevice(): boolean {
+    return localStorage.getItem('madrasah_is_owner_device') === 'true';
+  }
+
+  public setOwnerDevice(isOwner: boolean): void {
+    if (isOwner) {
+      localStorage.setItem('madrasah_is_owner_device', 'true');
+      localStorage.removeItem('madrasah_owner_auth_expire');
+    } else {
+      localStorage.setItem('madrasah_is_owner_device', 'false');
+      localStorage.removeItem('madrasah_owner_auth_expire');
+    }
+  }
+
+  public isOwnerAuthorized(): boolean {
+    if (this.isOwnerDevice()) {
+      return true;
+    }
+    try {
+      const expire = localStorage.getItem('madrasah_owner_auth_expire');
+      if (expire && parseInt(expire, 10) > Date.now()) {
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  }
+
+  public setTemporaryOwnerAuth(minutes: number = 15): void {
+    const expire = Date.now() + minutes * 60 * 1000;
+    localStorage.setItem('madrasah_owner_auth_expire', expire.toString());
+  }
+
+  public lockOwnerMode(): void {
+    localStorage.setItem('madrasah_is_owner_device', 'false');
+    localStorage.removeItem('madrasah_owner_auth_expire');
+  }
+
+  // Cross-device Backup & Sync Code Helpers
+  public exportAllData(): string {
+    const data: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('madrasah_') || key === 'notifications')) {
+        const val = localStorage.getItem(key);
+        try {
+          data[key] = JSON.parse(val || '');
+        } catch (e) {
+          data[key] = val;
+        }
+      }
+    }
+    data.exportedAt = new Date().toISOString();
+    data.exportedDevice = getDeviceName();
+    return JSON.stringify(data, null, 2);
+  }
+
+  public async importAllData(jsonString: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (!parsed || typeof parsed !== 'object') {
+        return { success: false, error: 'ফাইলটিতে সঠিক ডাটা পাওয়া যায়নি।' };
+      }
+
+      delete parsed.exportedAt;
+      delete parsed.exportedDevice;
+
+      this.applyFullServerData(parsed, true);
+      await this.syncBulk(parsed, 'ডাটা ইমপোর্ট ও সম্পূর্ণ রিস্টোর');
+      return { success: true };
+    } catch (e: any) {
+      console.error('Failed to import data:', e);
+      return { success: false, error: e?.message || 'ডাটা ইমপোর্ট ব্যর্থ হয়েছে।' };
+    }
   }
 
   // Device helpers

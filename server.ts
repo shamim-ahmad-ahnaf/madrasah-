@@ -10,14 +10,31 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Global CORS Middleware
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (_req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '20mb' }));
 
-// Ensure data directory exists
-const DATA_DIR = path.resolve(__dirname, 'data');
+// Determine safe storage directory (Vercel serverless has read-only filesystem except /tmp)
+const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isVercel ? '/tmp' : path.resolve(__dirname, 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'database.json');
+const SEED_FILE = path.resolve(__dirname, 'data', 'database.json');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create DATA_DIR:', e);
 }
 
 // In-memory DB structure with default fallback
@@ -53,23 +70,34 @@ let db: DatabaseSchema = {
   lastUpdated: new Date().toISOString()
 };
 
-// Load existing database if available
+// Load existing database if available (or fallback to seed file)
 if (fs.existsSync(DB_FILE)) {
   try {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     db = { ...db, ...JSON.parse(raw) };
-    if (!db.madrasah_admin_password) {
-      db.madrasah_admin_password = 'admin123';
-    }
   } catch (err) {
-    console.error('Error reading database file:', err);
+    console.error('Error reading DB_FILE:', err);
   }
+} else if (fs.existsSync(SEED_FILE)) {
+  try {
+    const raw = fs.readFileSync(SEED_FILE, 'utf-8');
+    db = { ...db, ...JSON.parse(raw) };
+  } catch (err) {
+    console.error('Error reading SEED_FILE:', err);
+  }
+}
+
+if (!db.madrasah_admin_password) {
+  db.madrasah_admin_password = 'admin123';
 }
 
 // Save DB helper
 function persistDB() {
   try {
     db.lastUpdated = new Date().toISOString();
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error saving database:', err);
@@ -316,7 +344,18 @@ app.post('/api/notifications/clear', (_req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// Start Server & mount Vite / static
+// API: Health check for Vercel / clients
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    isVercel,
+    serverTime: new Date().toISOString(),
+    lastUpdated: db.lastUpdated,
+    activeSSEClients: sseClients.length
+  });
+});
+
+// Start Server & mount Vite / static when running as a standalone Node server
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -337,6 +376,10 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-});
+if (!isVercel) {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+  });
+}
+
+export default app;

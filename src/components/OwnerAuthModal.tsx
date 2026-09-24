@@ -24,7 +24,7 @@ export default function OwnerAuthModal({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const [remember15Min, setRemember15Min] = useState(true);
+  const [authMode, setAuthMode] = useState<'permanent' | 'temporary' | 'once'>('permanent');
 
   if (!isOpen) return null;
 
@@ -41,9 +41,13 @@ export default function OwnerAuthModal({
     try {
       const isValid = await realtimeSync.verifyOwnerPassword(password);
       if (isValid) {
-        if (remember15Min) {
-          const expireTime = Date.now() + 15 * 60 * 1000; // 15 mins
-          localStorage.setItem('madrasah_owner_auth_expire', expireTime.toString());
+        if (authMode === 'permanent') {
+          realtimeSync.setOwnerDevice(true);
+        } else if (authMode === 'temporary') {
+          realtimeSync.setTemporaryOwnerAuth(15);
+        } else {
+          // once: do not save persistent token
+          localStorage.removeItem('madrasah_owner_auth_expire');
         }
         setPassword('');
         setError('');
@@ -136,18 +140,73 @@ export default function OwnerAuthModal({
             </div>
           </div>
 
-          {/* Remember for 15 minutes checkbox */}
-          <div className="flex items-center space-x-2 pt-1">
-            <input
-              type="checkbox"
-              id="rememberAuth"
-              checked={remember15Min}
-              onChange={(e) => setRemember15Min(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded-md border-slate-300 focus:ring-emerald-500 cursor-pointer"
-            />
-            <label htmlFor="rememberAuth" className="text-xs font-semibold text-slate-600 cursor-pointer select-none">
-              এই ডিভাইসে পরবর্তী ১৫ মিনিট অনুমোদন সক্রিয় রাখুন
+          {/* Auth Duration and Device Recognition Options */}
+          <div className="space-y-2 pt-1 border-t border-slate-100">
+            <label className="block text-[11px] font-bold text-slate-700">
+              অনুমোদনের ধরণ ও ডিভাইসের মর্যাদা নির্ধারণ করুন:
             </label>
+
+            <div className="space-y-1.5">
+              <label className={`flex items-start space-x-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                authMode === 'permanent' 
+                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold shadow-2xs' 
+                  : 'bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="authModeOption"
+                  checked={authMode === 'permanent'}
+                  onChange={() => setAuthMode('permanent')}
+                  className="mt-0.5 w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="text-[11px] leading-tight">
+                  <div className="flex items-center space-x-1">
+                    <span className="font-extrabold text-emerald-900">👑 স্থায়ী মালিক ডিভাইস হিসেবে সংরক্ষণ করুন</span>
+                    <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded-full font-bold">প্রস্তাবিত</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-normal">
+                    এই ডিভাইসে আর কখনো পাসওয়ার্ড চাইবে না। সরাসরি সকল পরিবর্তন ফাইনাল হবে।
+                  </p>
+                </div>
+              </label>
+
+              <label className={`flex items-start space-x-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                authMode === 'temporary' 
+                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold shadow-2xs' 
+                  : 'bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="authModeOption"
+                  checked={authMode === 'temporary'}
+                  onChange={() => setAuthMode('temporary')}
+                  className="mt-0.5 w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="text-[11px] leading-tight">
+                  <span className="font-bold text-slate-800">⏱️ পরবর্তী ১৫ মিনিটের জন্য সক্রিয় রাখুন</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-normal">
+                    ১৫ মিনিট পর স্বয়ংক্রিয়ভাবে পুনরায় লক হয়ে যাবে।
+                  </p>
+                </div>
+              </label>
+
+              <label className={`flex items-start space-x-2.5 p-2 rounded-xl border cursor-pointer transition-all ${
+                authMode === 'once' 
+                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold shadow-2xs' 
+                  : 'bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="authModeOption"
+                  checked={authMode === 'once'}
+                  onChange={() => setAuthMode('once')}
+                  className="mt-0.5 w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="text-[11px] leading-tight">
+                  <span className="font-semibold text-slate-700">🔒 শুধুমাত্র এই কাজের জন্য অনুমোদন দিন</span>
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* Action Buttons */}
