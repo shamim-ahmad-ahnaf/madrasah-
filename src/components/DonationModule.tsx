@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DonationRecord } from '../types';
+import { realtimeSync } from '../services/realtimeSync';
 import { 
   HeartHandshake, 
   Coins, 
@@ -94,11 +95,27 @@ export default function DonationModule() {
       setDonations(initialDonations);
       localStorage.setItem('madrasah_donations', JSON.stringify(initialDonations));
     }
+
+    // Subscribe to multi-device real-time sync for donations
+    const unsubscribe = realtimeSync.subscribe((event) => {
+      if (event.key === 'madrasah_donations' && Array.isArray(event.data)) {
+        setDonations(event.data);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  const saveDonations = (list: DonationRecord[]) => {
+  const saveDonations = (list: DonationRecord[], customActionTitle?: string) => {
     setDonations(list);
-    localStorage.setItem('madrasah_donations', JSON.stringify(list));
+    realtimeSync.syncChange('madrasah_donations', list, {
+      title: customActionTitle || 'দান-অনুদান রসিদ হালনাগাদ',
+      message: `${realtimeSync.getDeviceName()} হতে অনুদান সংগ্রহ ও ফান্ড রেকর্ড আপডেট করা হয়েছে।`,
+      module: 'donation',
+      type: 'update'
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {

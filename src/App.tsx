@@ -63,10 +63,25 @@ import {
   Radio,
   ShieldCheck,
   KeyRound,
-  Check
+  Check,
+  RefreshCw,
+  Laptop,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 export default function App() {
+  // Multi-Device Real-Time Sync & Refresh States
+  const [syncStatus, setSyncStatus] = useState<{ connected: boolean; syncing: boolean; lastSyncTime: string }>({
+    connected: true,
+    syncing: false,
+    lastSyncTime: 'এখনই'
+  });
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
+  const [currentDeviceName, setCurrentDeviceName] = useState(() => realtimeSync.getDeviceName());
+  const [tempDeviceName, setTempDeviceName] = useState('');
+
   // Madrasah Profile Settings State
   const [madrasahName, setMadrasahName] = useState(() => {
     return localStorage.getItem('madrasah_profile_name') || 'দারুল উলুম মাদ্রাসা';
@@ -276,84 +291,65 @@ export default function App() {
     };
   }, []);
 
-  // Initial load effect
+  // Subscribe to multi-device sync status
   useEffect(() => {
-    // One-time clear of old default data keys to ensure a clean slate immediately
-    const cleanSlateActive = localStorage.getItem('madrasah_clean_slate_active_v4');
-    if (!cleanSlateActive) {
-      localStorage.removeItem('madrasah_students');
-      localStorage.removeItem('madrasah_teachers');
-      localStorage.removeItem('madrasah_attendance');
-      localStorage.removeItem('madrasah_payments');
-      localStorage.removeItem('madrasah_schedules');
-      localStorage.removeItem('madrasah_notices');
-      localStorage.removeItem('madrasah_sms_logs');
-      localStorage.removeItem('madrasah_books');
-      localStorage.removeItem('madrasah_borrow_records');
-      localStorage.setItem('madrasah_clean_slate_active_v4', 'yes');
-    }
+    const unsubStatus = realtimeSync.subscribeStatus((status) => {
+      setSyncStatus(status);
+    });
+    return () => unsubStatus();
+  }, []);
 
-    // Students
+  // Initial load effect and instant multi-device server synchronization
+  useEffect(() => {
+    // 1. Immediate read from localStorage for instant initial UI rendering
     const storedStudents = localStorage.getItem('madrasah_students');
     if (storedStudents) {
-      setStudents(JSON.parse(storedStudents));
+      try { setStudents(JSON.parse(storedStudents)); } catch (e) {}
     } else {
       setStudents(initialStudents);
       localStorage.setItem('madrasah_students', JSON.stringify(initialStudents));
     }
 
-    // Teachers
     const storedTeachers = localStorage.getItem('madrasah_teachers');
     if (storedTeachers) {
-      setTeachers(JSON.parse(storedTeachers));
+      try { setTeachers(JSON.parse(storedTeachers)); } catch (e) {}
     } else {
       setTeachers(initialTeachers);
       localStorage.setItem('madrasah_teachers', JSON.stringify(initialTeachers));
     }
 
-    // Attendance
     const storedAttendance = localStorage.getItem('madrasah_attendance');
     if (storedAttendance) {
-      setAttendance(JSON.parse(storedAttendance));
-    } else {
-      setAttendance([]);
+      try { setAttendance(JSON.parse(storedAttendance)); } catch (e) {}
     }
 
-    // Payments
     const storedPayments = localStorage.getItem('madrasah_payments');
     if (storedPayments) {
-      setPayments(JSON.parse(storedPayments));
+      try { setPayments(JSON.parse(storedPayments)); } catch (e) {}
     } else {
       setPayments(initialPayments);
       localStorage.setItem('madrasah_payments', JSON.stringify(initialPayments));
     }
 
-    // Schedules
     const storedSchedules = localStorage.getItem('madrasah_schedules');
     if (storedSchedules) {
-      setSchedules(JSON.parse(storedSchedules));
+      try { setSchedules(JSON.parse(storedSchedules)); } catch (e) {}
     } else {
       setSchedules(initialSchedules);
       localStorage.setItem('madrasah_schedules', JSON.stringify(initialSchedules));
     }
 
-    // Notices
     const storedNotices = localStorage.getItem('madrasah_notices');
     if (storedNotices) {
-      setNotices(JSON.parse(storedNotices));
+      try { setNotices(JSON.parse(storedNotices)); } catch (e) {}
     } else {
       setNotices(initialNotices);
       localStorage.setItem('madrasah_notices', JSON.stringify(initialNotices));
     }
 
-    // SMS Logs
     const storedSms = localStorage.getItem('madrasah_sms_logs');
     if (storedSms) {
-      setSmsLogs(JSON.parse(storedSms));
-    } else {
-      const initialSms: SMSLog[] = [];
-      setSmsLogs(initialSms);
-      localStorage.setItem('madrasah_sms_logs', JSON.stringify(initialSms));
+      try { setSmsLogs(JSON.parse(storedSms)); } catch (e) {}
     }
 
     // Notifications initial seeding if empty
@@ -363,7 +359,7 @@ export default function App() {
         {
           id: 'notif_welcome_live',
           title: 'স্বাগতম! লাইভ নোটিফিকেশন ও সিঙ্ক সক্রিয় 🟢',
-          message: 'যেকোনো ডিভাইস হতে ছাত্র ভর্তি, ফি গ্রহণ, হাজিরা ও পরীক্ষার ফলাফল আপডেট হলে তৎক্ষণাৎ নোটিফিকেশন আসবে।',
+          message: 'যেকোনো ডিভাইস (ল্যাপটপ/মোবাইল) হতে ডাটা এন্ট্রি বা ডিলিট হলে তৎক্ষণাৎ অন্য সকল ডিভাইসে সিঙ্ক হবে।',
           module: 'general',
           type: 'info',
           timestamp: new Date().toISOString(),
@@ -372,7 +368,7 @@ export default function App() {
         {
           id: 'notif_welcome_security',
           title: 'মালিক পাসওয়ার্ড সুরক্ষা চালু 🔐',
-          message: 'যেকোনো পরিবর্তন ডাটাবেজে ফাইনাল করার জন্য মালিকের পাসওয়ার্ড আবশ্যক (ডিফল্ট: admin123)।',
+          message: 'যেকোনো পরিবর্তন ফাইনাল করার জন্য মালিকের পাসওয়ার্ড আবশ্যক (ডিফল্ট: admin123)।',
           module: 'settings',
           type: 'info',
           timestamp: new Date(Date.now() - 120000).toISOString(),
@@ -383,9 +379,58 @@ export default function App() {
       localStorage.setItem('madrasah_notifications', JSON.stringify(defaultNotifs));
     }
 
-    // Real-Time Multi-Device Listener Subscription
+    // 2. Fetch authoritative fresh state from server immediately (handles mobile refresh & load)
+    const pullInitialServerData = async () => {
+      const res = await realtimeSync.forceRefresh();
+      if (res.success && res.data) {
+        const d = res.data;
+        if (Array.isArray(d.madrasah_students)) setStudents(d.madrasah_students);
+        if (Array.isArray(d.madrasah_teachers)) setTeachers(d.madrasah_teachers);
+        if (Array.isArray(d.madrasah_payments)) setPayments(d.madrasah_payments);
+        if (Array.isArray(d.madrasah_attendance)) setAttendance(d.madrasah_attendance);
+        if (Array.isArray(d.madrasah_schedules)) setSchedules(d.madrasah_schedules);
+        if (Array.isArray(d.madrasah_notices)) setNotices(d.madrasah_notices);
+        if (Array.isArray(d.madrasah_sms_logs)) setSmsLogs(d.madrasah_sms_logs);
+        if (d.madrasah_profile_name) setMadrasahName(d.madrasah_profile_name);
+        if (d.madrasah_profile_slogan) setMadrasahSlogan(d.madrasah_profile_slogan);
+
+        if (Array.isArray(d.notifications) && d.notifications.length > 0) {
+          setNotifications((prev) => {
+            const map = new Map<string, AppNotification>();
+            d.notifications.forEach((n: AppNotification) => {
+              if (n && n.id) map.set(n.id, n);
+            });
+            prev.forEach((n: AppNotification) => {
+              if (n && n.id && !map.has(n.id)) map.set(n.id, n);
+            });
+            const updated = Array.from(map.values()).slice(0, 100);
+            try {
+              localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+          });
+        }
+      }
+    };
+    pullInitialServerData();
+
+    // 3. Real-Time Multi-Device Listener Subscription
     const unsubscribe = realtimeSync.subscribe((event) => {
-      // Data synchronization from other devices / tabs
+      // Bulk sync from server
+      if (event.type === 'BULK_REFRESH_COMPLETE' && event.entries) {
+        const d = event.entries;
+        if (Array.isArray(d.madrasah_students)) setStudents(d.madrasah_students);
+        if (Array.isArray(d.madrasah_teachers)) setTeachers(d.madrasah_teachers);
+        if (Array.isArray(d.madrasah_payments)) setPayments(d.madrasah_payments);
+        if (Array.isArray(d.madrasah_attendance)) setAttendance(d.madrasah_attendance);
+        if (Array.isArray(d.madrasah_schedules)) setSchedules(d.madrasah_schedules);
+        if (Array.isArray(d.madrasah_notices)) setNotices(d.madrasah_notices);
+        if (Array.isArray(d.madrasah_sms_logs)) setSmsLogs(d.madrasah_sms_logs);
+        if (d.madrasah_profile_name) setMadrasahName(d.madrasah_profile_name);
+        if (d.madrasah_profile_slogan) setMadrasahSlogan(d.madrasah_profile_slogan);
+      }
+
+      // Individual key sync
       if (event.key === 'madrasah_students' && Array.isArray(event.data)) {
         setStudents(event.data);
       } else if (event.key === 'madrasah_teachers' && Array.isArray(event.data)) {
@@ -417,6 +462,75 @@ export default function App() {
     };
   }, []);
 
+  // Handle manual 1-click full database refresh across devices
+  const handleManualRefresh = async () => {
+    setIsManualRefreshing(true);
+    try {
+      const res = await realtimeSync.forceRefresh();
+      if (res.success && res.data) {
+        const d = res.data;
+        if (Array.isArray(d.madrasah_students)) setStudents(d.madrasah_students);
+        if (Array.isArray(d.madrasah_teachers)) setTeachers(d.madrasah_teachers);
+        if (Array.isArray(d.madrasah_payments)) setPayments(d.madrasah_payments);
+        if (Array.isArray(d.madrasah_attendance)) setAttendance(d.madrasah_attendance);
+        if (Array.isArray(d.madrasah_schedules)) setSchedules(d.madrasah_schedules);
+        if (Array.isArray(d.madrasah_notices)) setNotices(d.madrasah_notices);
+        if (Array.isArray(d.madrasah_sms_logs)) setSmsLogs(d.madrasah_sms_logs);
+        if (d.madrasah_profile_name) setMadrasahName(d.madrasah_profile_name);
+        if (d.madrasah_profile_slogan) setMadrasahSlogan(d.madrasah_profile_slogan);
+
+        const refreshedToast: AppNotification = {
+          id: `notif_refresh_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          title: 'ডাটাবেজ রিফ্রেশ সম্পন্ন 🔄',
+          message: 'সার্ভার ও অন্যান্য ডিভাইসের সর্বশেষ ডাটা সফলভাবে সিঙ্ক হয়েছে।',
+          module: 'general',
+          type: 'info',
+          timestamp: new Date().toISOString(),
+          isRead: false
+        };
+        addOrUpdateNotification(refreshedToast);
+      } else {
+        const errToast: AppNotification = {
+          id: `notif_err_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          title: 'রিফ্রেশ সতর্কতা ⚠️',
+          message: res.error || 'সার্ভার থেকে ডাটা আনতে সমস্যা হয়েছে।',
+          module: 'general',
+          type: 'info',
+          timestamp: new Date().toISOString(),
+          isRead: false
+        };
+        addOrUpdateNotification(errToast);
+      }
+    } finally {
+      setTimeout(() => setIsManualRefreshing(false), 500);
+    }
+  };
+
+  // Device Name management
+  const handleOpenDeviceModal = () => {
+    setTempDeviceName(realtimeSync.getDeviceName());
+    setIsDeviceModalOpen(true);
+  };
+
+  const handleSaveDeviceName = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tempDeviceName.trim()) {
+      realtimeSync.setDeviceName(tempDeviceName.trim());
+      setCurrentDeviceName(tempDeviceName.trim());
+      setIsDeviceModalOpen(false);
+      const toast: AppNotification = {
+        id: `notif_dev_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        title: 'ডিভাইসের নাম সংরক্ষিত 💻',
+        message: `এই ডিভাইসের নাম নির্ধারণ করা হয়েছে: "${tempDeviceName.trim()}"`,
+        module: 'settings',
+        type: 'info',
+        timestamp: new Date().toISOString(),
+        isRead: false
+      };
+      addOrUpdateNotification(toast);
+    }
+  };
+
   // CRUD Operations handlers with Owner Password Protection and Multi-Device Real-time Sync
   // 1. Students
   const handleAddStudent = (studentData: Omit<Student, 'id'>) => {
@@ -431,9 +545,10 @@ export default function App() {
         const updatedList = [newStudent, ...students];
         setStudents(updatedList);
         
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_students', updatedList, {
-          title: 'নতুন শিক্ষার্থী ভর্তি সম্পন্ন',
-          message: `${newStudent.name} (রোল: ${newStudent.roll}, শ্রেণী: ${newStudent.gradeClass}) নতুন ভর্তি হয়েছে।`,
+          title: 'নতুন শিক্ষার্থী ভর্তি সম্পন্ন 🎓',
+          message: `🔐 [${deviceName}] হতে "${newStudent.name}" (রোল: ${newStudent.roll}, শ্রেণী: ${newStudent.gradeClass}) ভর্তি অনুমোদন ও ডাটাবেজে যুক্ত করা হয়েছে।`,
           module: 'student',
           type: 'create'
         });
@@ -449,9 +564,10 @@ export default function App() {
         const updatedList = students.map(s => s.id === updatedStudent.id ? updatedStudent : s);
         setStudents(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_students', updatedList, {
-          title: 'শিক্ষার্থী তথ্য সংশোধিত',
-          message: `${updatedStudent.name} এর তথ্য সফলভাবে আপডেট করা হয়েছে।`,
+          title: 'শিক্ষার্থী তথ্য সংশোধিত 📝',
+          message: `🔐 [${deviceName}] হতে শিক্ষার্থী "${updatedStudent.name}" এর তথ্য পরিবর্তন অনুমোদিত হয়েছে।`,
           module: 'student',
           type: 'update'
         });
@@ -468,9 +584,10 @@ export default function App() {
         const updatedList = students.filter(s => s.id !== id);
         setStudents(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_students', updatedList, {
-          title: 'শিক্ষার্থী রেকর্ড অপসারিত',
-          message: `${studentToDelete?.name || 'শিক্ষার্থী'} এর রেকর্ড তালিকা হতে মুছে ফেলা হয়েছে।`,
+          title: 'শিক্ষার্থী রেকর্ড অপসারিত 🗑️',
+          message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে "${studentToDelete?.name || 'শিক্ষার্থী'}" এর রেকর্ড তালিকা হতে মুছে ফেলা হয়েছে।`,
           module: 'student',
           type: 'delete'
         });
@@ -492,9 +609,10 @@ export default function App() {
         const updatedList = [newTeacher, ...teachers];
         setTeachers(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_teachers', updatedList, {
-          title: 'নতুন শিক্ষক যুক্ত হয়েছেন',
-          message: `${newTeacher.name} (${newTeacher.designation}) এর তথ্য যুক্ত করা হয়েছে।`,
+          title: 'নতুন শিক্ষক যুক্ত হয়েছেন 👨‍🏫',
+          message: `🔐 [${deviceName}] হতে উস্তাদ "${newTeacher.name}" (${newTeacher.designation}) এর নিয়োগ অনুমোদন করা হয়েছে।`,
           module: 'teacher',
           type: 'create'
         });
@@ -510,9 +628,10 @@ export default function App() {
         const updatedList = teachers.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
         setTeachers(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_teachers', updatedList, {
-          title: 'শিক্ষক তথ্য হালনাগাদ',
-          message: `${updatedTeacher.name} এর তথ্য সফলভাবে আপডেট হয়েছে।`,
+          title: 'শিক্ষক তথ্য হালনাগাদ 📝',
+          message: `🔐 [${deviceName}] হতে উস্তাদ "${updatedTeacher.name}" এর তথ্য পরিবর্তন অনুমোদিত হয়েছে।`,
           module: 'teacher',
           type: 'update'
         });
@@ -529,9 +648,10 @@ export default function App() {
         const updatedList = teachers.filter(t => t.id !== id);
         setTeachers(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_teachers', updatedList, {
-          title: 'শিক্ষক রেকর্ড অপসারিত',
-          message: `${teacherToDelete?.name || 'শিক্ষক'} এর রেকর্ড মুছে ফেলা হয়েছে।`,
+          title: 'শিক্ষক রেকর্ড অপসারিত 🗑️',
+          message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে উস্তাদ "${teacherToDelete?.name || 'শিক্ষক'}" এর রেকর্ড মুছে ফেলা হয়েছে।`,
           module: 'teacher',
           type: 'delete'
         });
@@ -638,9 +758,10 @@ export default function App() {
         const finalAttendance = [...filteredPrev, ...incomingWithIds];
         setAttendance(finalAttendance);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_attendance', finalAttendance, {
-          title: 'হাজিরা খাতা হালনাগাদ',
-          message: `${firstRec ? firstRec.gradeClass + ' এর ' : ''}${firstRec?.date || 'আজকের'} হাজিরা সংরক্ষিত হয়েছে (${incomingWithIds.length} জন শিক্ষার্থী)।`,
+          title: 'হাজিরা খাতা সংরক্ষিত 📋',
+          message: `🔐 [${deviceName}] হতে ${firstRec ? firstRec.gradeClass + ' এর ' : ''}${firstRec?.date || 'আজকের'} হাজিরা অনুমোদন ও ক্লাউডে সংরক্ষণ করা হয়েছে।`,
           module: 'attendance',
           type: 'update'
         });
@@ -694,9 +815,10 @@ export default function App() {
         const updatedList = [newPayment, ...payments];
         setPayments(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_payments', updatedList, {
-          title: 'নতুন ফি আদায় সম্পন্ন',
-          message: `${paymentData.studentName} (${paymentData.gradeClass}) এর ${paymentData.payingMonth} মাসের ৳${paymentData.amount} টাকা জমা হয়েছে।`,
+          title: 'নতুন ফি আদায় সম্পন্ন 💵',
+          message: `🔐 [${deviceName}] হতে ${paymentData.studentName} (${paymentData.gradeClass}) এর ${paymentData.payingMonth} মাসের ৳${paymentData.amount} টাকা ফি আদায় অনুমোদন হয়েছে।`,
           module: 'finance',
           type: 'create'
         });
@@ -737,9 +859,10 @@ export default function App() {
         const updatedList = payments.filter(p => p.id !== id);
         setPayments(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_payments', updatedList, {
-          title: 'ফি রসিদ মুছে ফেলা হয়েছে',
-          message: `${paymentToDelete?.studentName || ''} এর ৳${paymentToDelete?.amount || 0} টাকার ফি রসিদ অপসারিত হয়েছে।`,
+          title: 'ফি রসিদ মুছে ফেলা হয়েছে 🗑️',
+          message: `🔐 [${deviceName}] এ মালিকের পাসওয়ার্ড অনুমোদন সাপেক্ষে ${paymentToDelete?.studentName || ''} এর ৳${paymentToDelete?.amount || 0} টাকার ফি রসিদ অপসারিত হয়েছে।`,
           module: 'finance',
           type: 'delete'
         });
@@ -761,9 +884,10 @@ export default function App() {
         const updatedList = [newSchedule, ...schedules];
         setSchedules(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_schedules', updatedList, {
-          title: 'শ্রেণী রুটিন হালনাগাদ',
-          message: `${newSchedule.gradeClass} এর জন্য "${newSchedule.subject}" বিষয়ের ক্লাস যুক্ত করা হয়েছে।`,
+          title: 'শ্রেণী রুটিন হালনাগাদ ⏰',
+          message: `🔐 [${deviceName}] হতে ${newSchedule.gradeClass} এর জন্য "${newSchedule.subject}" ক্লাসের সময়সূচি অনুমোদিত ও যুক্ত হয়েছে।`,
           module: 'routine',
           type: 'create'
         });
@@ -779,9 +903,10 @@ export default function App() {
         const updatedList = schedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s);
         setSchedules(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_schedules', updatedList, {
-          title: 'রুটিন সময়সূচি সংশোধিত',
-          message: `${updatedSchedule.gradeClass} এর "${updatedSchedule.subject}" ক্লাসের সময় পরিবর্তন করা হয়েছে।`,
+          title: 'রুটিন সময়সূচি সংশোধিত ⏰',
+          message: `🔐 [${deviceName}] হতে ${updatedSchedule.gradeClass} এর "${updatedSchedule.subject}" ক্লাসের সময় পরিবর্তন অনুমোদিত হয়েছে।`,
           module: 'routine',
           type: 'update'
         });
@@ -797,9 +922,10 @@ export default function App() {
         const updatedList = schedules.filter(s => s.id !== id);
         setSchedules(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_schedules', updatedList, {
-          title: 'রুটিন পিরিয়ড অপসারিত',
-          message: 'রুটিন হতে একটি পিরিয়ড মুছে ফেলা হয়েছে।',
+          title: 'রুটিন পিরিয়ড অপসারিত 🗑️',
+          message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে রুটিন হতে একটি পিরিয়ড মুছে ফেলা হয়েছে।`,
           module: 'routine',
           type: 'delete'
         });
@@ -821,9 +947,10 @@ export default function App() {
         const updatedList = [newNotice, ...notices];
         setNotices(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_notices', updatedList, {
-          title: 'নতুন নোটিশ প্রকাশিত',
-          message: `বিজ্ঞপ্তি: "${newNotice.title}" সকল ডিভাইসে প্রকাশিত হয়েছে।`,
+          title: 'নতুন নোটিশ প্রকাশিত 📢',
+          message: `🔐 [${deviceName}] হতে বিজ্ঞপ্তি: "${newNotice.title}" সকল ডিভাইসে প্রকাশিত হয়েছে।`,
           module: 'notice',
           type: 'create'
         });
@@ -839,9 +966,10 @@ export default function App() {
         const updatedList = notices.map(n => n.id === updatedNotice.id ? updatedNotice : n);
         setNotices(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_notices', updatedList, {
-          title: 'নোটিশ সংশোধিত হয়েছে',
-          message: `বিজ্ঞপ্তি "${updatedNotice.title}" আপডেট করা হয়েছে।`,
+          title: 'নোটিশ সংশোধিত হয়েছে 📢',
+          message: `🔐 [${deviceName}] হতে বিজ্ঞপ্তি "${updatedNotice.title}" আপডেট করা হয়েছে।`,
           module: 'notice',
           type: 'update'
         });
@@ -857,9 +985,10 @@ export default function App() {
         const updatedList = notices.filter(n => n.id !== id);
         setNotices(updatedList);
 
+        const deviceName = realtimeSync.getDeviceName();
         realtimeSync.syncChange('madrasah_notices', updatedList, {
-          title: 'নোটিশ অপসারিত',
-          message: 'একটি নোটিশ বোর্ড হতে মুছে ফেলা হয়েছে।',
+          title: 'নোটিশ অপসারিত 🗑️',
+          message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে একটি নোটিশ বোর্ড হতে মুছে ফেলা হয়েছে।`,
           module: 'notice',
           type: 'delete'
         });
@@ -1255,6 +1384,26 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-1.5">
+          {/* Mobile Instant Refresh Button */}
+          <button 
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing}
+            className="p-2 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition-colors cursor-pointer"
+            title="ডাটাবেজ রিফ্রেশ করুন"
+          >
+            <RefreshCw size={15} className={isManualRefreshing ? 'animate-spin text-amber-300' : ''} />
+          </button>
+
+          {/* Mobile Device Name Chip */}
+          <button
+            onClick={handleOpenDeviceModal}
+            className="flex items-center space-x-1 bg-emerald-950/70 text-emerald-200 px-2 py-1.5 rounded-lg text-[10px] font-bold border border-emerald-700/50 cursor-pointer"
+            title="ডিভাইসের নাম ও সিঙ্ক তথ্য"
+          >
+            <Smartphone size={12} className="text-emerald-400 shrink-0" />
+            <span className="truncate max-w-[75px]">{currentDeviceName}</span>
+          </button>
+
           {/* Notification Center in Mobile */}
           <NotificationCenter
             notifications={notifications}
@@ -1374,12 +1523,33 @@ export default function App() {
 
           <div className="flex items-center space-x-2 sm:space-x-3">
             
-            {/* Live Sync Status Indicator Badge */}
-            <div className="hidden sm:flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2.5 py-1 rounded-xl text-[10px] font-bold shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="hidden md:inline">সকল ডিভাইসে</span>
-              <span>লাইভ সিঙ্ক চালু</span>
-            </div>
+            {/* Multi-Device Live Sync & Device Info Badge */}
+            <button
+              onClick={handleOpenDeviceModal}
+              className="hidden sm:flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-900 border border-emerald-200/80 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+              title="ডিভাইসের নাম ও লাইভ সিঙ্ক তথ্য দেখতে ক্লিক করুন"
+            >
+              <span className="flex h-2 w-2 relative">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${syncStatus.connected ? 'bg-emerald-400' : 'bg-amber-400'} opacity-75`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${syncStatus.connected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+              </span>
+              <Laptop size={13} className="text-emerald-700 shrink-0" />
+              <span className="truncate max-w-[130px]">{currentDeviceName}</span>
+              <span className="text-[9px] bg-emerald-200/70 text-emerald-900 px-1.5 py-0.5 rounded-md font-extrabold ml-1">
+                {syncStatus.connected ? 'লাইভ' : 'অফলাইন'}
+              </span>
+            </button>
+
+            {/* Manual 1-Click Instant Refresh Button */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={isManualRefreshing}
+              className="flex items-center space-x-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200/90 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-75"
+              title="সার্ভার থেকে সমস্ত ডিভাইসের সর্বশেষ ডাটা এখনই রিফ্রেশ ও সিঙ্ক করুন"
+            >
+              <RefreshCw size={13} className={`text-sky-700 shrink-0 ${isManualRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isManualRefreshing ? 'সিঙ্ক হচ্ছে...' : 'রিফ্রেশ'}</span>
+            </button>
 
             {/* Owner Security Status Badge (Lock / Unlock Toggle) */}
             {isOwnerAuthorized ? (
@@ -1926,6 +2096,143 @@ export default function App() {
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-5 rounded-xl text-xs transition-all cursor-pointer"
               >
                 ঠিক আছে
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Device Live Sync & Device Settings Modal */}
+      {isDeviceModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
+            
+            <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-teal-950 text-white p-4.5 flex items-center justify-between shrink-0 border-b border-emerald-800/40">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-800 flex items-center justify-center border border-emerald-400/40">
+                  <Laptop size={16} className="text-emerald-200" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm font-sans tracking-wide">মাল্টি-ডিভাইস লাইভ সিঙ্ক ও সেটিংস</h3>
+                  <p className="text-[10px] text-emerald-300 leading-none mt-0.5 font-sans">রিয়েল-টাইম ক্লাউড ডাটাবেজ সমন্বয়</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsDeviceModalOpen(false)}
+                className="text-white/80 hover:text-white bg-emerald-800 hover:bg-emerald-700 p-1.5 rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-slate-700 text-xs font-sans leading-relaxed">
+              
+              {/* Sync Status Banner */}
+              <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-900 flex items-center gap-2 text-xs">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    লাইভ সিঙ্ক স্ট্যাটাস: সংযুক্ত (Online)
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-850 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    সার্ভার লাইভ
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-emerald-800 pt-1">
+                  <span>সর্বশেষ সফল সিঙ্ক: <strong>{syncStatus.lastSyncTime || 'এইমাত্র'}</strong></span>
+                  <span className="text-[10px] text-slate-500 font-mono">আইডি: {realtimeSync.getDeviceId().substring(0, 10)}</span>
+                </div>
+              </div>
+
+              {/* How it works instruction */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5 text-slate-700 text-[11px]">
+                <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                  <span>💡</span> কিভাবে ডিভাইসগুলোর মাঝে ডাটা সিঙ্ক হয়?
+                </h4>
+                <ul className="space-y-2 list-disc list-inside text-slate-600">
+                  <li>
+                    <strong>প্রধান ডিভাইস (ল্যাপটপ / কম্পিউটার):</strong> ল্যাপটপ থেকে কোনো শিক্ষার্থী ভর্তি, ফি আদায়, হাজিরা বা ডাটা পরিবর্তন করলে তা তৎক্ষণাৎ সার্ভার ডাটাবেজে সংরক্ষিত হয়।
+                  </li>
+                  <li>
+                    <strong>অন্যান্য ডিভাইস (মোবাইল / ট্যাব):</strong> মোবাইল অ্যাপ খোলা থাকলে সাথে সাথে নোটিফিকেশন সহ ডাটা আপডেট হবে। অথবা পেজ রিফ্রেশ বা উপরের <strong>"রিফ্রেশ"</strong> বাটনে চাপ দিলে সমস্ত তথ্য তাৎক্ষণিক চলে আসবে।
+                  </li>
+                  <li>
+                    <strong>পাসওয়ার্ড সুরক্ষা ও স্বচ্ছতা:</strong> মালিকের পাসওয়ার্ড দিয়ে কোনো তথ্য এন্ট্রি বা ডিলিট হলে নোটিফিকেশনে স্পষ্ট লেখা থাকবে কোন ডিভাইস থেকে এই কাজটি অনুমোদিত হয়েছে।
+                  </li>
+                </ul>
+              </div>
+
+              {/* Device Rename Form */}
+              <form onSubmit={handleSaveDeviceName} className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1 text-xs">
+                    এই ডিভাইসের নাম বা পরিচিতি নির্ধারণ করুন:
+                  </label>
+                  <p className="text-[10px] text-slate-400 mb-2">
+                    (অন্যান্য ডিভাইসে প্রেরিত নোটিফিকেশন মেসেজে এই নামটি প্রদর্শিত হবে)
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tempDeviceName}
+                      onChange={(e) => setTempDeviceName(e.target.value)}
+                      placeholder="যেমন: ল্যাপটপ (মেইন ডিভাইস)"
+                      className="flex-1 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer shrink-0"
+                    >
+                      নাম সেভ করুন
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Selection Buttons */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['ল্যাপটপ / কম্পিউটার (মেইন)', 'প্রধান ল্যাপটপ', 'মোবাইল ডিভাইস', 'মুহতামিমের ফোন', 'অফিস কম্পিউটার'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTempDeviceName(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-colors cursor-pointer ${
+                        tempDeviceName === preset ? 'bg-emerald-50 border-emerald-400 text-emerald-800' : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </form>
+
+              {/* Instant Force Refresh Button */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleManualRefresh();
+                    setIsDeviceModalOpen(false);
+                  }}
+                  disabled={isManualRefreshing}
+                  className="w-full flex items-center justify-center space-x-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-sm cursor-pointer disabled:opacity-75"
+                >
+                  <RefreshCw size={14} className={isManualRefreshing ? 'animate-spin' : ''} />
+                  <span>এখনই সম্পূর্ণ ডাটাবেজ রিফ্রেশ ও সিঙ্ক করুন</span>
+                </button>
+              </div>
+
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+              <button
+                onClick={() => setIsDeviceModalOpen(false)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-5 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                বন্ধ করুন
               </button>
             </div>
 

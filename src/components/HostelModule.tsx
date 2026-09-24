@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Student, HostelRecord, MadrasahClass } from '../types';
+import { realtimeSync } from '../services/realtimeSync';
 import { 
   Home, 
   Utensils, 
@@ -67,11 +68,27 @@ export default function HostelModule({ students }: HostelModuleProps) {
       setHostelRecords(initialRecords);
       localStorage.setItem('madrasah_hostel_records', JSON.stringify(initialRecords));
     }
+
+    // Subscribe to multi-device updates
+    const unsubscribe = realtimeSync.subscribe((event) => {
+      if (event.key === 'madrasah_hostel_records' && Array.isArray(event.data)) {
+        setHostelRecords(event.data);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [students]);
 
   const saveRecords = (list: HostelRecord[]) => {
     setHostelRecords(list);
-    localStorage.setItem('madrasah_hostel_records', JSON.stringify(list));
+    realtimeSync.syncChange('madrasah_hostel_records', list, {
+      title: 'হোস্টেল সিট ও মিল আপডেট',
+      message: `${realtimeSync.getDeviceName()} হতে হোস্টেল বরাদ্দ ও মিলের তালিকা আপডেট করা হয়েছে।`,
+      module: 'hostel',
+      type: 'update'
+    });
   };
 
   const handleMealToggle = (id: string, mealType: 'breakfast' | 'lunch' | 'dinner') => {

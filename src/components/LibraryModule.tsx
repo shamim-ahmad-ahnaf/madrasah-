@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Student, Teacher, Book, BorrowRecord } from '../types';
+import { realtimeSync } from '../services/realtimeSync';
 import { 
   BookOpen, 
   Search, 
@@ -80,6 +81,19 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
       setBorrows(DEFAULT_BORROWS);
       localStorage.setItem('madrasah_borrow_records', JSON.stringify(DEFAULT_BORROWS));
     }
+
+    // Subscribe to multi-device real-time sync for library
+    const unsubscribe = realtimeSync.subscribe((event) => {
+      if (event.key === 'madrasah_books' && Array.isArray(event.data)) {
+        setBooks(event.data);
+      } else if (event.key === 'madrasah_borrow_records' && Array.isArray(event.data)) {
+        setBorrows(event.data);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const showNotification = (msg: string) => {
@@ -89,15 +103,25 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
     }, 4500);
   };
 
-  // Helper sync functions
-  const saveBooks = (updatedBooks: Book[]) => {
+  // Helper sync functions with multi-device propagation
+  const saveBooks = (updatedBooks: Book[], actionTitle?: string) => {
     setBooks(updatedBooks);
-    localStorage.setItem('madrasah_books', JSON.stringify(updatedBooks));
+    realtimeSync.syncChange('madrasah_books', updatedBooks, {
+      title: actionTitle || 'লাইব্রেরি কিতাব তালিকা আপডেট',
+      message: `${realtimeSync.getDeviceName()} হতে লাইব্রেরির কিতাব তালিকা হালনাগাদ করা হয়েছে।`,
+      module: 'library',
+      type: 'update'
+    });
   };
 
-  const saveBorrows = (updatedBorrows: BorrowRecord[]) => {
+  const saveBorrows = (updatedBorrows: BorrowRecord[], actionTitle?: string) => {
     setBorrows(updatedBorrows);
-    localStorage.setItem('madrasah_borrow_records', JSON.stringify(updatedBorrows));
+    realtimeSync.syncChange('madrasah_borrow_records', updatedBorrows, {
+      title: actionTitle || 'কিতাব লেনদেন হালনাগাদ',
+      message: `${realtimeSync.getDeviceName()} হতে কিতাব ইস্যু/ফেরত তথ্য আপডেট হয়েছে।`,
+      module: 'library',
+      type: 'update'
+    });
   };
 
   // Check and flag overdue list dynamically based on Today: 2026-06-09

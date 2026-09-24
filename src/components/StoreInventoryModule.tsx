@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { realtimeSync } from '../services/realtimeSync';
 import { 
   Boxes, 
   Plus, 
@@ -133,17 +134,40 @@ export default function StoreInventoryModule() {
       setTransactions(DEFAULT_TRANSACTIONS);
       localStorage.setItem('madrasah_inventory_transactions', JSON.stringify(DEFAULT_TRANSACTIONS));
     }
+
+    // Subscribe to multi-device sync for store & inventory
+    const unsubscribe = realtimeSync.subscribe((event) => {
+      if (event.key === 'madrasah_inventory_items' && Array.isArray(event.data)) {
+        setItems(event.data);
+      } else if (event.key === 'madrasah_inventory_transactions' && Array.isArray(event.data)) {
+        setTransactions(event.data);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  // Save utility
+  // Save utility with multi-device synchronization
   const saveItems = (updated: InventoryItem[]) => {
     setItems(updated);
-    localStorage.setItem('madrasah_inventory_items', JSON.stringify(updated));
+    realtimeSync.syncChange('madrasah_inventory_items', updated, {
+      title: 'স্টোর মালামাল স্টক হালনাগাদ',
+      message: `${realtimeSync.getDeviceName()} হতে স্টোরের মালামাল বা স্টক তথ্য আপডেট করা হয়েছে।`,
+      module: 'inventory',
+      type: 'update'
+    });
   };
 
   const saveTransactions = (updated: InventoryTransaction[]) => {
     setTransactions(updated);
-    localStorage.setItem('madrasah_inventory_transactions', JSON.stringify(updated));
+    realtimeSync.syncChange('madrasah_inventory_transactions', updated, {
+      title: 'স্টোর লেনদেন / চালান ভাউচার',
+      message: `${realtimeSync.getDeviceName()} হতে স্টোর ইন/আউট চালান রেকর্ড যুক্ত হয়েছে।`,
+      module: 'inventory',
+      type: 'update'
+    });
   };
 
   const showNotification = (msg: string) => {

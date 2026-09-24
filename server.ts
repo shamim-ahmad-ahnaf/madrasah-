@@ -129,12 +129,13 @@ app.get('/api/events', (req: Request, res: Response) => {
   const newClient: SSEClient = { id: clientId, res };
   sseClients.push(newClient);
 
-  // Send initial welcome & connection confirmation
+  // Send initial welcome & connection confirmation with latest state
   res.write(`data: ${JSON.stringify({
     type: 'CONNECTED',
     clientId,
     lastUpdated: db.lastUpdated,
-    notifications: (db.notifications || []).slice(-20)
+    notifications: (db.notifications || []).slice(0, 50),
+    data: db
   })}\n\n`);
 
   req.on('close', () => {
@@ -152,17 +153,18 @@ app.post('/api/sync', (req: Request, res: Response) => {
 
   // Update in DB
   (db as any)[key] = data;
+  db.lastUpdated = new Date().toISOString();
 
   // Prepare notification item
   const notificationItem = {
-    id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
     title: action?.title || 'তথ্য হালনাগাদ',
     message: action?.message || `${key} এ পরিবর্তন সম্পন্ন হয়েছে`,
     module: action?.module || 'general',
     type: action?.type || 'update',
     timestamp: new Date().toISOString(),
     senderDeviceId: senderDeviceId || 'unknown',
-    senderName: senderName || 'প্রধান ডিভাইস',
+    senderName: senderName || 'ডিভাইস',
     isRead: false
   };
 
@@ -185,7 +187,64 @@ app.post('/api/sync', (req: Request, res: Response) => {
     data,
     notification: notificationItem,
     senderDeviceId,
-    timestamp: new Date().toISOString()
+    senderName: senderName || 'ডিভাইস',
+    timestamp: db.lastUpdated
+  });
+
+  res.json({
+    success: true,
+    notification: notificationItem,
+    lastUpdated: db.lastUpdated
+  });
+});
+
+// API: Bulk Sync Action & Broadcast across all devices
+app.post('/api/sync-bulk', (req: Request, res: Response) => {
+  const { entries, action, senderDeviceId, senderName } = req.body;
+
+  if (!entries || typeof entries !== 'object') {
+    return res.status(400).json({ success: false, error: 'Entries object is required' });
+  }
+
+  // Update all provided keys in DB
+  Object.keys(entries).forEach((k) => {
+    (db as any)[k] = entries[k];
+  });
+  db.lastUpdated = new Date().toISOString();
+
+  let notificationItem = null;
+  if (action) {
+    notificationItem = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
+      title: action.title || 'ডাটা সিঙ্ক সম্পন্ন',
+      message: action.message || `${Object.keys(entries).length} টি মডিউল হালনাগাদ হয়েছে`,
+      module: action.module || 'general',
+      type: action.type || 'update',
+      timestamp: new Date().toISOString(),
+      senderDeviceId: senderDeviceId || 'unknown',
+      senderName: senderName || 'ডিভাইস',
+      isRead: false
+    };
+
+    if (!Array.isArray(db.notifications)) {
+      db.notifications = [];
+    }
+    db.notifications.unshift(notificationItem);
+    if (db.notifications.length > 100) {
+      db.notifications = db.notifications.slice(0, 100);
+    }
+  }
+
+  persistDB();
+
+  // Broadcast bulk update to all connected devices
+  broadcastToClients({
+    type: 'BULK_DATA_SYNC',
+    entries,
+    notification: notificationItem,
+    senderDeviceId,
+    senderName: senderName || 'ডিভাইস',
+    timestamp: db.lastUpdated
   });
 
   res.json({

@@ -14,10 +14,16 @@ export const getDeviceName = (): string => {
   let name = localStorage.getItem('madrasah_device_name');
   if (!name) {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    name = isMobile ? 'মোবাইল ডিভাইস' : 'কম্পিউটার / পিসি';
+    name = isMobile ? 'মোবাইল ডিভাইস' : 'ল্যাপটপ / কম্পিউটার (মেইন)';
     localStorage.setItem('madrasah_device_name', name);
   }
   return name;
+};
+
+export const setDeviceName = (name: string): void => {
+  if (name && name.trim()) {
+    localStorage.setItem('madrasah_device_name', name.trim());
+  }
 };
 
 // Subtle Web Audio Sound Notification (No external asset dependencies)
@@ -57,29 +63,37 @@ export const playNotificationChime = () => {
 
 export interface SyncEventPayload {
   type: string;
-  key: string;
-  data: any;
+  key?: string;
+  data?: any;
+  entries?: Record<string, any>;
   notification?: AppNotification;
   senderDeviceId?: string;
+  senderName?: string;
   timestamp?: string;
 }
 
 type SyncListener = (event: SyncEventPayload) => void;
+type StatusListener = (status: { connected: boolean; syncing: boolean; lastSyncTime: string }) => void;
 
 class RealtimeSyncManager {
   private listeners: Set<SyncListener> = new Set();
+  private statusListeners: Set<StatusListener> = new Set();
   private broadcastChannel: BroadcastChannel | null = null;
   private eventSource: EventSource | null = null;
   private isConnectedToServer: boolean = false;
+  private isCurrentlySyncing: boolean = false;
   private reconnectTimeout: any = null;
   private fallbackPollingInterval: any = null;
   private lastServerTimestamp: string = '';
+  private lastSuccessfulSyncTime: string = 'এখনই';
 
   constructor() {
     this.initBroadcastChannel();
     this.initSSE();
     this.initStorageListener();
     this.initFallbackPolling();
+    // Fetch initial server data immediately upon construction
+    this.fetchInitialServerData();
   }
 
   // 1. Same-device multi-tab instant synchronization via BroadcastChannel
@@ -88,7 +102,7 @@ class RealtimeSyncManager {
       try {
         this.broadcastChannel = new BroadcastChannel('madrasah_realtime_channel');
         this.broadcastChannel.onmessage = (event) => {
-          if (event.data && event.data.key) {
+          if (event.data) {
             this.notifyListeners(event.data);
           }
         };
@@ -98,7 +112,7 @@ class RealtimeSyncManager {
     }
   }
 
-  // 2. Storage event listener for older or fallback browsers
+  // 2. Storage event listener for older or fallback browser tabs
   private initStorageListener() {
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
@@ -132,15 +146,58 @@ class RealtimeSyncManager {
 
       this.eventSource.onopen = () => {
         this.isConnectedToServer = true;
+        this.broadcastStatus();
       };
 
       this.eventSource.onmessage = (e) => {
         try {
           const payload: SyncEventPayload = JSON.parse(e.data);
           if (payload && payload.type) {
-            // Check if this event was sent by another device
             const myDeviceId = getDeviceId();
+
+            if (payload.type === 'CONNECTED') {
+              this.isConnectedToServer = true;
+              if (payload.timestamp || payload.data) {
+                this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+              }
+              this.broadcastStatus();
+
+              // If server provided full data upon connection, apply it if we haven't synced yet
+              if (payload.data && typeof payload.data === 'object') {
+                this.applyFullServerData(payload.data, false);
+              }
+              return;
+            }
+
+            // Check if this event was sent by another device or server
             if (payload.senderDeviceId !== myDeviceId) {
+              if (payload.type === 'DATA_SYNC' && payload.key) {
+                // Update local storage directly
+                try {
+                  const dataStr = typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data);
+                  localStorage.setItem(payload.key, dataStr);
+                } catch (err) {
+                  // ignore
+                }
+              } else if (payload.type === 'BULK_DATA_SYNC' && payload.entries) {
+                Object.keys(payload.entries).forEach((k) => {
+                  try {
+                    const val = payload.entries![k];
+                    const dataStr = typeof val === 'string' ? val : JSON.stringify(val);
+                    localStorage.setItem(k, dataStr);
+                  } catch (err) {
+                    // ignore
+                  }
+                });
+              }
+
+              // Play chime for incoming remote changes
+              if (payload.notification) {
+                playNotificationChime();
+              }
+
+              this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+              this.broadcastStatus();
               this.notifyListeners(payload);
             }
           }
@@ -151,22 +208,46 @@ class RealtimeSyncManager {
 
       this.eventSource.onerror = () => {
         this.isConnectedToServer = false;
+        this.broadcastStatus();
         if (this.eventSource) {
           this.eventSource.close();
           this.eventSource = null;
         }
-        // Auto-reconnect after 4 seconds
+        // Auto-reconnect after 3 seconds
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = setTimeout(() => {
           this.initSSE();
-        }, 4000);
+        }, 3000);
       };
     } catch (err) {
       this.isConnectedToServer = false;
+      this.broadcastStatus();
     }
   }
 
-  // 4. Periodic polling fallback every 5 seconds to ensure 100% data freshness
+  // 4. Initial server data fetch on startup
+  public async fetchInitialServerData() {
+    try {
+      this.isCurrentlySyncing = true;
+      this.broadcastStatus();
+      const res = await fetch('/api/data');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          this.lastServerTimestamp = json.lastUpdated || '';
+          this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+          this.applyFullServerData(json.data, true);
+        }
+      }
+    } catch (err) {
+      console.warn('Initial server fetch failed, using cached localStorage data:', err);
+    } finally {
+      this.isCurrentlySyncing = false;
+      this.broadcastStatus();
+    }
+  }
+
+  // 5. Periodic polling fallback every 4 seconds to guarantee zero missed updates
   private initFallbackPolling() {
     if (typeof window === 'undefined') return;
 
@@ -177,26 +258,35 @@ class RealtimeSyncManager {
           const json = await res.json();
           if (json.success && json.lastUpdated && json.lastUpdated !== this.lastServerTimestamp) {
             this.lastServerTimestamp = json.lastUpdated;
-            // Update local store with server's freshest data if newer
+            this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
             if (json.data) {
-              this.applyFullServerData(json.data);
+              this.applyFullServerData(json.data, false);
             }
+            this.broadcastStatus();
           }
         }
       } catch (e) {
-        // server might be busy, ignore
+        // network glitch
       }
-    }, 5000);
+    }, 4000);
   }
 
   // Apply server data into localStorage and trigger listeners
-  private applyFullServerData(data: Record<string, any>) {
-    Object.keys(data).forEach((key) => {
-      if (key.startsWith('madrasah_') && data[key] !== undefined) {
+  public applyFullServerData(data: Record<string, any>, isInitialBoot: boolean = false) {
+    if (!data || typeof data !== 'object') return;
+
+    const keysToSync = Object.keys(data).filter(
+      (k) => k.startsWith('madrasah_') || k === 'notifications'
+    );
+
+    keysToSync.forEach((key) => {
+      if (data[key] !== undefined) {
         try {
           const currentLocal = localStorage.getItem(key);
           const newString = typeof data[key] === 'string' ? data[key] : JSON.stringify(data[key]);
-          if (currentLocal !== newString) {
+
+          // Update if changed or on initial boot
+          if (currentLocal !== newString || isInitialBoot) {
             localStorage.setItem(key, newString);
             this.notifyListeners({
               type: 'FULL_DATA_SYNC',
@@ -210,6 +300,44 @@ class RealtimeSyncManager {
         }
       }
     });
+
+    // Also notify bulk sync event so UI can reload all collections cleanly
+    this.notifyListeners({
+      type: 'BULK_REFRESH_COMPLETE',
+      entries: data,
+      senderDeviceId: 'server'
+    });
+  }
+
+  // Force manual refresh: fetches all data from server immediately
+  public async forceRefresh(): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      this.isCurrentlySyncing = true;
+      this.broadcastStatus();
+
+      const res = await fetch('/api/data');
+      if (!res.ok) {
+        throw new Error('Server returned status ' + res.status);
+      }
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.lastServerTimestamp = json.lastUpdated || '';
+        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+        this.applyFullServerData(json.data, true);
+        this.isConnectedToServer = true;
+        this.broadcastStatus();
+        return { success: true, data: json.data };
+      } else {
+        return { success: false, error: 'Invalid response from server' };
+      }
+    } catch (err: any) {
+      console.error('Manual refresh error:', err);
+      return { success: false, error: err?.message || 'ডাটাবেজ রিফ্রেশ ব্যর্থ হয়েছে।' };
+    } finally {
+      this.isCurrentlySyncing = false;
+      this.broadcastStatus();
+    }
   }
 
   // Subscribe to real-time events
@@ -218,6 +346,35 @@ class RealtimeSyncManager {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  // Subscribe to connection status changes
+  public subscribeStatus(listener: StatusListener) {
+    this.statusListeners.add(listener);
+    // Send immediate status
+    listener({
+      connected: this.isConnectedToServer,
+      syncing: this.isCurrentlySyncing,
+      lastSyncTime: this.lastSuccessfulSyncTime
+    });
+    return () => {
+      this.statusListeners.delete(listener);
+    };
+  }
+
+  private broadcastStatus() {
+    const status = {
+      connected: this.isConnectedToServer,
+      syncing: this.isCurrentlySyncing,
+      lastSyncTime: this.lastSuccessfulSyncTime
+    };
+    this.statusListeners.forEach((l) => {
+      try {
+        l(status);
+      } catch (e) {
+        // ignore
+      }
+    });
   }
 
   private notifyListeners(event: SyncEventPayload) {
@@ -250,7 +407,7 @@ class RealtimeSyncManager {
 
     // 2. Create notification record
     const notification: AppNotification = {
-      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`,
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       title: action.title,
       message: action.message,
       module: action.module,
@@ -266,7 +423,7 @@ class RealtimeSyncManager {
       const storedNotifs: AppNotification[] = JSON.parse(localStorage.getItem('madrasah_notifications') || '[]');
       const notifMap = new Map<string, AppNotification>();
       notifMap.set(notification.id, notification);
-      storedNotifs.forEach(n => {
+      storedNotifs.forEach((n) => {
         if (n && n.id && !notifMap.has(n.id)) {
           notifMap.set(n.id, n);
         }
@@ -284,6 +441,7 @@ class RealtimeSyncManager {
       data,
       notification,
       senderDeviceId,
+      senderName,
       timestamp: new Date().toISOString()
     };
 
@@ -300,7 +458,10 @@ class RealtimeSyncManager {
 
     // 4. Send to server to broadcast to all external devices/phones/computers
     try {
-      await fetch('/api/sync', {
+      this.isCurrentlySyncing = true;
+      this.broadcastStatus();
+
+      const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -311,11 +472,67 @@ class RealtimeSyncManager {
           senderName
         })
       });
+
+      if (res.ok) {
+        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+        this.isConnectedToServer = true;
+      }
     } catch (err) {
       console.warn('Network sync failed, persisted locally:', err);
+      this.isConnectedToServer = false;
+    } finally {
+      this.isCurrentlySyncing = false;
+      this.broadcastStatus();
     }
 
     return notification;
+  }
+
+  // Bulk sync helper
+  public async syncBulk(
+    entries: Record<string, any>,
+    action: {
+      title: string;
+      message: string;
+      module: AppNotification['module'];
+      type: AppNotification['type'];
+    }
+  ) {
+    const senderDeviceId = getDeviceId();
+    const senderName = getDeviceName();
+
+    // Persist locally
+    Object.keys(entries).forEach((k) => {
+      const val = entries[k];
+      const str = typeof val === 'string' ? val : JSON.stringify(val);
+      localStorage.setItem(k, str);
+    });
+
+    try {
+      this.isCurrentlySyncing = true;
+      this.broadcastStatus();
+
+      const res = await fetch('/api/sync-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entries,
+          action,
+          senderDeviceId,
+          senderName
+        })
+      });
+
+      if (res.ok) {
+        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+        this.isConnectedToServer = true;
+      }
+    } catch (e) {
+      console.warn('Bulk sync to server failed:', e);
+    } finally {
+      this.isCurrentlySyncing = false;
+      this.broadcastStatus();
+    }
   }
 
   // Verify Owner / Admin Password
@@ -378,6 +595,19 @@ class RealtimeSyncManager {
   // Status check
   public isConnected(): boolean {
     return this.isConnectedToServer;
+  }
+
+  // Device helpers
+  public getDeviceId(): string {
+    return getDeviceId();
+  }
+
+  public getDeviceName(): string {
+    return getDeviceName();
+  }
+
+  public setDeviceName(name: string): void {
+    setDeviceName(name);
   }
 }
 
