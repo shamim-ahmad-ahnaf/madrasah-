@@ -186,15 +186,7 @@ export default function App() {
 
   // Owner Password Authorization State
   const checkIsOwnerAuthorized = (): boolean => {
-    try {
-      const expire = localStorage.getItem('madrasah_owner_auth_expire');
-      if (expire && parseInt(expire, 10) > Date.now()) {
-        return true;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return false;
+    return realtimeSync.isOwnerAuthorized();
   };
 
   const [isOwnerAuthorized, setIsOwnerAuthorized] = useState<boolean>(checkIsOwnerAuthorized);
@@ -238,7 +230,7 @@ export default function App() {
 
   // Lock owner mode immediately
   const handleLockOwnerMode = () => {
-    localStorage.removeItem('madrasah_owner_auth_expire');
+    realtimeSync.lockOwnerMode();
     setIsOwnerAuthorized(false);
     const lockToast: AppNotification = {
       id: `notif_${Date.now()}`,
@@ -1555,7 +1547,9 @@ export default function App() {
             {isOwnerAuthorized ? (
               <div className="flex items-center space-x-1.5 bg-emerald-900 text-white px-3 py-1.5 rounded-xl text-[10px] font-bold shadow-xs">
                 <Unlock size={12} className="text-emerald-300" />
-                <span className="hidden md:inline">মালিক মোড আনলক</span>
+                <span className="hidden md:inline">
+                  {realtimeSync.isOwnerDevice() ? 'মালিক ডিভাইস (অনুমোদিত)' : 'মালিক মোড আনলক'}
+                </span>
                 <button
                   onClick={handleLockOwnerMode}
                   className="ml-1 text-emerald-200 hover:text-white font-extrabold underline text-[10px] cursor-pointer"
@@ -1569,12 +1563,12 @@ export default function App() {
                 onClick={() => {
                   requireOwnerAuth(
                     'মালিক মোড আনলক করুন',
-                    'এই ডিভাইসে মালিকের এক্সেস ১৫ মিনিটের জন্য সক্রিয় করতে পাসওয়ার্ড দিন।',
+                    'এই ডিভাইসে মালিকের এক্সেস সক্রিয় করতে পাসওয়ার্ড দিন।',
                     () => {
                       const unlockToast: AppNotification = {
                         id: `notif_${Date.now()}`,
-                        title: 'মালিক মোড আনলক হয়েছে',
-                        message: 'পরবর্তী ১৫ মিনিট পাসওয়ার্ড ছাড়া যেকোনো পরিবর্তন সরাসরি ফাইনাল করা যাবে।',
+                        title: 'মালিক মোড আনলক হয়েছে 🔓',
+                        message: 'এই ডিভাইসে যেকোনো পরিবর্তন সরাসরি ফাইনাল করা যাবে।',
                         module: 'settings',
                         type: 'info',
                         timestamp: new Date().toISOString(),
@@ -1584,7 +1578,7 @@ export default function App() {
                       setCurrentToast(unlockToast);
                       playNotificationChime();
                     },
-                    'আনলক করুন'
+                    'অনুমোদন ও আনলক করুন'
                   );
                 }}
                 className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
@@ -2146,6 +2140,51 @@ export default function App() {
                   <span>সর্বশেষ সফল সিঙ্ক: <strong>{syncStatus.lastSyncTime || 'এইমাত্র'}</strong></span>
                   <span className="text-[10px] text-slate-500 font-mono">আইডি: {realtimeSync.getDeviceId().substring(0, 10)}</span>
                 </div>
+              </div>
+
+              {/* Owner Device Status Toggle in Device Modal */}
+              <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-extrabold text-amber-950 text-xs flex items-center gap-1.5">
+                    <ShieldCheck size={15} className="text-amber-700" />
+                    মালিক / অ্যাডমিন ডিভাইস স্বীকৃতি
+                  </h4>
+                  <p className="text-[10px] text-amber-800 mt-0.5 leading-relaxed">
+                    {realtimeSync.isOwnerDevice()
+                      ? 'এই ডিভাইসটি বর্তমানে স্থায়ী "মালিক ডিভাইস" হিসেবে নিবন্ধিত আছে (কোনো কাজে বারবার পাসওয়ার্ড চাইবে না)।'
+                      : 'এই ডিভাইসকে স্থায়ী মালিক ডিভাইস করলে যেকোনো তথ্য এন্ট্রি বা এডিটে পাসওয়ার্ড দেওয়ার ঝামেলা থাকবে না।'}
+                  </p>
+                </div>
+                {realtimeSync.isOwnerDevice() ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      realtimeSync.lockOwnerMode();
+                      setIsOwnerAuthorized(false);
+                    }}
+                    className="bg-rose-100 hover:bg-rose-200 text-rose-800 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-rose-200 transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+                  >
+                    সাধারণ ডিভাইস করুন
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      requireOwnerAuth(
+                        'মালিক ডিভাইস হিসেবে অনুমোদন',
+                        'এই ডিভাইসকে স্থায়ী মালিক ডিভাইস হিসেবে সক্রিয় করতে মালিকের পাসওয়ার্ড দিন।',
+                        () => {
+                          realtimeSync.setOwnerDevice(true);
+                          setIsOwnerAuthorized(true);
+                        },
+                        'স্থায়ী অনুমোদন দিন'
+                      );
+                    }}
+                    className="bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+                  >
+                    মালিক ডিভাইস করুন
+                  </button>
+                )}
               </div>
 
               {/* How it works instruction */}

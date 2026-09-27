@@ -1,4 +1,5 @@
 import { AppNotification } from '../types';
+import { db, doc, setDoc, getDoc, onSnapshot } from './firebase';
 
 // Persistent Device Identifier
 export const getDeviceId = (): string => {
@@ -14,7 +15,7 @@ export const getDeviceName = (): string => {
   let name = localStorage.getItem('madrasah_device_name');
   if (!name) {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    name = isMobile ? 'মোবাইল ডিভাইস' : 'ল্যাপটপ / কম্পিউটার (মেইন)';
+    name = isMobile ? 'মোবাইল ডিভাইস' : 'প্রধান ডিভাইস (অ্যাডমিন)';
     localStorage.setItem('madrasah_device_name', name);
   }
   return name;
@@ -79,21 +80,17 @@ class RealtimeSyncManager {
   private listeners: Set<SyncListener> = new Set();
   private statusListeners: Set<StatusListener> = new Set();
   private broadcastChannel: BroadcastChannel | null = null;
-  private eventSource: EventSource | null = null;
-  private isConnectedToServer: boolean = false;
+  private isConnectedToServer: boolean = navigator.onLine;
   private isCurrentlySyncing: boolean = false;
-  private reconnectTimeout: any = null;
-  private fallbackPollingInterval: any = null;
   private lastServerTimestamp: string = '';
   private lastSuccessfulSyncTime: string = 'এখনই';
+  private firestoreUnsubscribe: (() => void) | null = null;
 
   constructor() {
     this.initBroadcastChannel();
-    this.initSSE();
     this.initStorageListener();
-    this.initFallbackPolling();
-    // Fetch initial server data immediately upon construction
-    this.fetchInitialServerData();
+    this.initNetworkListeners();
+    this.initFirestoreListener();
   }
 
   // 1. Same-device multi-tab instant synchronization via BroadcastChannel
@@ -112,7 +109,7 @@ class RealtimeSyncManager {
     }
   }
 
-  // 2. Storage event listener for older or fallback browser tabs
+  // 2. Storage event listener for fallback browser tabs
   private initStorageListener() {
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
@@ -133,154 +130,120 @@ class RealtimeSyncManager {
     }
   }
 
-  // 3. Multi-device Real-Time Server-Sent Events (SSE)
-  private initSSE() {
-    if (typeof window === 'undefined') return;
-
-    try {
-      if (this.eventSource) {
-        this.eventSource.close();
-      }
-
-      this.eventSource = new EventSource('/api/events');
-
-      this.eventSource.onopen = () => {
+  // 3. Online/offline connection watchers
+  private initNetworkListeners() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
         this.isConnectedToServer = true;
         this.broadcastStatus();
-      };
-
-      this.eventSource.onmessage = (e) => {
-        try {
-          const payload: SyncEventPayload = JSON.parse(e.data);
-          if (payload && payload.type) {
-            const myDeviceId = getDeviceId();
-
-            if (payload.type === 'CONNECTED') {
-              this.isConnectedToServer = true;
-              if (payload.timestamp || payload.data) {
-                this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-              }
-              this.broadcastStatus();
-
-              // If server provided full data upon connection, apply it if we haven't synced yet
-              if (payload.data && typeof payload.data === 'object') {
-                this.applyFullServerData(payload.data, false);
-              }
-              return;
-            }
-
-            // Check if this event was sent by another device or server
-            if (payload.senderDeviceId !== myDeviceId) {
-              if (payload.type === 'DATA_SYNC' && payload.key) {
-                // Update local storage directly
-                try {
-                  const dataStr = typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data);
-                  localStorage.setItem(payload.key, dataStr);
-                } catch (err) {
-                  // ignore
-                }
-              } else if (payload.type === 'BULK_DATA_SYNC' && payload.entries) {
-                Object.keys(payload.entries).forEach((k) => {
-                  try {
-                    const val = payload.entries![k];
-                    const dataStr = typeof val === 'string' ? val : JSON.stringify(val);
-                    localStorage.setItem(k, dataStr);
-                  } catch (err) {
-                    // ignore
-                  }
-                });
-              }
-
-              // Play chime for incoming remote changes
-              if (payload.notification) {
-                playNotificationChime();
-              }
-
-              this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-              this.broadcastStatus();
-              this.notifyListeners(payload);
-            }
-          }
-        } catch (err) {
-          // heartbeat or ping
-        }
-      };
-
-      this.eventSource.onerror = () => {
+        this.forceRefresh();
+      });
+      window.addEventListener('offline', () => {
         this.isConnectedToServer = false;
         this.broadcastStatus();
-        if (this.eventSource) {
-          this.eventSource.close();
-          this.eventSource = null;
-        }
-        // Auto-reconnect after 3 seconds
-        clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = setTimeout(() => {
-          this.initSSE();
-        }, 3000);
-      };
-    } catch (err) {
-      this.isConnectedToServer = false;
-      this.broadcastStatus();
+      });
     }
   }
 
-  // 4. Initial server data fetch on startup
-  public async fetchInitialServerData() {
-    try {
-      this.isCurrentlySyncing = true;
-      this.broadcastStatus();
-      const res = await fetch('/api/data');
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          this.isConnectedToServer = true;
-          this.lastServerTimestamp = json.lastUpdated || '';
-          this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-          this.applyFullServerData(json.data, true);
-        }
-      }
-    } catch (err) {
-      console.warn('Initial server fetch failed, using cached localStorage data:', err);
-    } finally {
-      this.isCurrentlySyncing = false;
-      this.broadcastStatus();
-    }
-  }
-
-  // 5. Periodic polling fallback every 3.5 seconds to guarantee zero missed updates
-  private initFallbackPolling() {
+  // 4. Firebase Firestore Live Real-Time Snapshot Listener
+  private initFirestoreListener() {
     if (typeof window === 'undefined') return;
 
-    this.fallbackPollingInterval = setInterval(async () => {
-      try {
-        const res = await fetch('/api/data');
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const json = await res.json();
+    try {
+      const docRef = doc(db, 'madrasah_system', 'main_store');
+      this.firestoreUnsubscribe = onSnapshot(
+        docRef,
+        (snapshot) => {
           this.isConnectedToServer = true;
-          if (json.success && json.lastUpdated && json.lastUpdated !== this.lastServerTimestamp) {
-            this.lastServerTimestamp = json.lastUpdated;
-            this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-            if (json.data) {
-              this.applyFullServerData(json.data, false);
-            }
+          this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          this.broadcastStatus();
+
+          if (!snapshot.exists()) {
+            // Initial seed if Firestore document is fresh
+            this.seedInitialDataToFirestore();
+            return;
           }
+
+          const rawData = snapshot.data();
+          if (!rawData) return;
+
+          const myDeviceId = getDeviceId();
+          const lastEvent = rawData._lastEvent;
+
+          // If another device triggered this update
+          if (lastEvent && lastEvent.senderDeviceId !== myDeviceId) {
+            if (lastEvent.key && lastEvent.data !== undefined) {
+              try {
+                const dataStr = typeof lastEvent.data === 'string' ? lastEvent.data : JSON.stringify(lastEvent.data);
+                localStorage.setItem(lastEvent.key, dataStr);
+              } catch (e) {}
+            }
+
+            if (lastEvent.notification) {
+              playNotificationChime();
+            }
+
+            this.notifyListeners({
+              type: 'DATA_SYNC',
+              key: lastEvent.key,
+              data: lastEvent.data,
+              notification: lastEvent.notification,
+              senderDeviceId: lastEvent.senderDeviceId,
+              senderName: lastEvent.senderName,
+              timestamp: lastEvent.timestamp
+            });
+          }
+
+          // Merge all data keys into localStorage
+          this.applyFullServerData(rawData, false);
+        },
+        (error) => {
+          console.warn('Firestore live listener offline or reconnecting:', error);
+          this.isConnectedToServer = navigator.onLine;
           this.broadcastStatus();
         }
-      } catch (e) {
-        // network glitch
-      }
-    }, 3500);
+      );
+    } catch (err) {
+      console.warn('Could not initialize Firestore listener:', err);
+    }
   }
 
-  // Apply server data into localStorage and trigger listeners
+  // Initial seed from localStorage or server to Firestore if fresh
+  private async seedInitialDataToFirestore() {
+    try {
+      const localData: Record<string, any> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('madrasah_') || k === 'notifications')) {
+          try {
+            localData[k] = JSON.parse(localStorage.getItem(k) || '');
+          } catch (e) {
+            localData[k] = localStorage.getItem(k);
+          }
+        }
+      }
+
+      if (Object.keys(localData).length > 0) {
+        const docRef = doc(db, 'madrasah_system', 'main_store');
+        await setDoc(docRef, {
+          ...localData,
+          _updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('Could not seed data to Firestore:', e);
+    }
+  }
+
+  // Apply server/Firestore data into localStorage and trigger listeners
   public applyFullServerData(data: Record<string, any>, isInitialBoot: boolean = false) {
     if (!data || typeof data !== 'object') return;
 
     const keysToSync = Object.keys(data).filter(
-      (k) => k.startsWith('madrasah_') || k === 'notifications'
+      (k) => !k.startsWith('_') && (k.startsWith('madrasah_') || k === 'notifications')
     );
 
     keysToSync.forEach((key) => {
@@ -313,28 +276,43 @@ class RealtimeSyncManager {
     });
   }
 
-  // Force manual refresh: fetches all data from server immediately
+  // Force manual refresh: pulls fresh data from Firestore immediately
   public async forceRefresh(): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       this.isCurrentlySyncing = true;
       this.broadcastStatus();
 
-      const res = await fetch('/api/data');
-      if (!res.ok) {
-        throw new Error('Server returned status ' + res.status);
+      // 1. Try Firestore direct
+      try {
+        const docRef = doc(db, 'madrasah_system', 'main_store');
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          this.isConnectedToServer = true;
+          this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+          this.applyFullServerData(data, true);
+          this.broadcastStatus();
+          return { success: true, data };
+        }
+      } catch (err) {
+        console.warn('Direct Firestore fetch error, trying backend route:', err);
       }
 
-      const json = await res.json();
-      if (json.success && json.data) {
-        this.lastServerTimestamp = json.lastUpdated || '';
-        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-        this.applyFullServerData(json.data, true);
-        this.isConnectedToServer = true;
-        this.broadcastStatus();
-        return { success: true, data: json.data };
-      } else {
-        return { success: false, error: 'Invalid response from server' };
+      // 2. Fallback to Express backend if running in fullstack dev
+      const res = await fetch('/api/data');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          this.lastServerTimestamp = json.lastUpdated || '';
+          this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+          this.applyFullServerData(json.data, true);
+          this.isConnectedToServer = true;
+          this.broadcastStatus();
+          return { success: true, data: json.data };
+        }
       }
+
+      return { success: false, error: 'ডাটাবেজ রিফ্রেশ সম্পন্ন হয়নি।' };
     } catch (err: any) {
       console.error('Manual refresh error:', err);
       return { success: false, error: err?.message || 'ডাটাবেজ রিফ্রেশ ব্যর্থ হয়েছে।' };
@@ -355,7 +333,6 @@ class RealtimeSyncManager {
   // Subscribe to connection status changes
   public subscribeStatus(listener: StatusListener) {
     this.statusListeners.add(listener);
-    // Send immediate status
     listener({
       connected: this.isConnectedToServer,
       syncing: this.isCurrentlySyncing,
@@ -449,7 +426,6 @@ class RealtimeSyncManager {
       timestamp: new Date().toISOString()
     };
 
-    // Notify local listeners so toast and notifications appear immediately
     this.notifyListeners(payload);
 
     if (this.broadcastChannel) {
@@ -460,12 +436,44 @@ class RealtimeSyncManager {
       }
     }
 
-    // 4. Send to server to broadcast to all external devices/phones/computers
+    // 4. Send to Firebase Firestore for Instant Global Multi-Device Broadcast
     try {
       this.isCurrentlySyncing = true;
       this.broadcastStatus();
 
-      const res = await fetch('/api/sync', {
+      const docRef = doc(db, 'madrasah_system', 'main_store');
+      await setDoc(
+        docRef,
+        {
+          [key]: data,
+          _lastEvent: {
+            key,
+            data,
+            notification,
+            senderDeviceId,
+            senderName,
+            timestamp: new Date().toISOString()
+          },
+          _updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+
+      this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      this.isConnectedToServer = true;
+    } catch (err) {
+      console.warn('Firestore sync failed, local copy kept:', err);
+    } finally {
+      this.isCurrentlySyncing = false;
+      this.broadcastStatus();
+    }
+
+    // 5. Also notify backend if reachable (optional fallback)
+    try {
+      fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -475,19 +483,8 @@ class RealtimeSyncManager {
           senderDeviceId,
           senderName
         })
-      });
-
-      if (res.ok) {
-        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-        this.isConnectedToServer = true;
-      }
-    } catch (err) {
-      console.warn('Network sync failed, persisted locally:', err);
-      this.isConnectedToServer = false;
-    } finally {
-      this.isCurrentlySyncing = false;
-      this.broadcastStatus();
-    }
+      }).catch(() => {});
+    } catch (e) {}
 
     return notification;
   }
@@ -516,23 +513,30 @@ class RealtimeSyncManager {
       this.isCurrentlySyncing = true;
       this.broadcastStatus();
 
-      const res = await fetch('/api/sync-bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries,
-          action,
-          senderDeviceId,
-          senderName
-        })
-      });
+      const docRef = doc(db, 'madrasah_system', 'main_store');
+      await setDoc(
+        docRef,
+        {
+          ...entries,
+          _lastEvent: {
+            key: 'bulk',
+            entries,
+            senderDeviceId,
+            senderName,
+            timestamp: new Date().toISOString()
+          },
+          _updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
 
-      if (res.ok) {
-        this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-        this.isConnectedToServer = true;
-      }
+      this.lastSuccessfulSyncTime = new Date().toLocaleTimeString('bn-BD', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      this.isConnectedToServer = true;
     } catch (e) {
-      console.warn('Bulk sync to server failed:', e);
+      console.warn('Bulk sync to Firestore failed:', e);
     } finally {
       this.isCurrentlySyncing = false;
       this.broadcastStatus();
@@ -544,21 +548,21 @@ class RealtimeSyncManager {
     const trimmed = password.trim();
     if (!trimmed) return false;
 
-    // Check with backend
+    // Check with Firestore Security Document
     try {
-      const res = await fetch('/api/verify-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: trimmed })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.valid) return true;
+      const secSnap = await getDoc(doc(db, 'madrasah_system', 'security'));
+      if (secSnap.exists()) {
+        const secData = secSnap.data();
+        if (secData && secData.adminPassword) {
+          localStorage.setItem('madrasah_admin_password', secData.adminPassword);
+          return trimmed === secData.adminPassword;
+        }
       }
     } catch (e) {
-      // offline fallback: check localStorage
+      // offline fallback
     }
 
+    // Check local storage or default password
     const localAdminPassword = localStorage.getItem('madrasah_admin_password') || 'admin123';
     return trimmed === localAdminPassword;
   }
@@ -568,31 +572,32 @@ class RealtimeSyncManager {
     currentPassword: string,
     newPassword: string
   ): Promise<{ success: boolean; message?: string; error?: string }> {
-    try {
-      const res = await fetch('/api/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: currentPassword.trim(),
-          newPassword: newPassword.trim()
-        })
-      });
+    const isCurrentValid = await this.verifyOwnerPassword(currentPassword);
+    if (!isCurrentValid) {
+      return { success: false, error: 'বর্তমান পাসওয়ার্ড সঠিক নয়!' };
+    }
 
-      const json = await res.json();
-      if (json.success) {
-        localStorage.setItem('madrasah_admin_password', newPassword.trim());
-        return { success: true, message: json.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে।' };
-      } else {
-        return { success: false, error: json.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে।' };
-      }
-    } catch (e) {
-      // Local fallback
-      const localCurrent = localStorage.getItem('madrasah_admin_password') || 'admin123';
-      if (currentPassword.trim() !== localCurrent) {
-        return { success: false, error: 'বর্তমান পাসওয়ার্ড সঠিক নয়!' };
-      }
-      localStorage.setItem('madrasah_admin_password', newPassword.trim());
+    const trimmedNew = newPassword.trim();
+    if (trimmedNew.length < 4) {
+      return { success: false, error: 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!' };
+    }
+
+    try {
+      // Save to Firestore
+      const secRef = doc(db, 'madrasah_system', 'security');
+      await setDoc(secRef, {
+        adminPassword: trimmedNew,
+        updatedAt: new Date().toISOString(),
+        updatedBy: getDeviceName()
+      }, { merge: true });
+
+      // Save locally
+      localStorage.setItem('madrasah_admin_password', trimmedNew);
+
       return { success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে।' };
+    } catch (e: any) {
+      localStorage.setItem('madrasah_admin_password', trimmedNew);
+      return { success: true, message: 'পাসওয়ার্ড স্থানীয়ভাবে আপডেট হয়েছে।' };
     }
   }
 
@@ -671,7 +676,12 @@ class RealtimeSyncManager {
       delete parsed.exportedDevice;
 
       this.applyFullServerData(parsed, true);
-      await this.syncBulk(parsed, 'ডাটা ইমপোর্ট ও সম্পূর্ণ রিস্টোর');
+      await this.syncBulk(parsed, {
+        title: 'ডাটাবেজ রিস্টোর সম্পন্ন 📥',
+        message: 'ব্যাকআপ ফাইল হতে সমস্ত তথ্য সফলভাবে রিস্টোর ও সিঙ্ক করা হয়েছে।',
+        module: 'general',
+        type: 'update'
+      });
       return { success: true };
     } catch (e: any) {
       console.error('Failed to import data:', e);

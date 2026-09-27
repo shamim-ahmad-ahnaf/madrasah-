@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "MadrasahRecord": {
+      "title": "Madrasah Data Record",
+      "description": "Synced records for students, teachers, payments, attendance, notices, and settings",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "any" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "deviceId": { "type": "string" }
+      }
+    },
+    "NotificationItem": {
+      "title": "Live Notification",
+      "description": "Multi-device real-time event notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "module": { "type": "string" },
+        "type": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/madrasah_data/{docId}": {
+      "entity": "MadrasahRecord",
+      "description": "Central collection for all synchronized madrasah state across devices"
+    }
+  }
+}

@@ -202,16 +202,16 @@ export default function NotificationCenter({
           className={`relative p-2 rounded-xl transition-all border cursor-pointer flex items-center justify-center ${
             isOpen 
               ? 'bg-emerald-800 text-white border-emerald-700 shadow-md' 
-              : 'bg-white/10 hover:bg-white/20 text-white border-emerald-700/50 shadow-2xs'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 shadow-2xs'
           }`}
           title="নোটিফিকেশন সেন্টার ও লাইভ সিঙ্ক"
         >
-          <Bell size={17} />
+          <Bell size={16} className={isOpen ? 'text-white' : 'text-slate-700'} />
           {unreadCount > 0 && (
             <motion.span 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="absolute -top-1 -right-1 bg-rose-500 text-white font-mono text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-emerald-900 shadow-xs"
+              className="absolute -top-1 -right-1 bg-rose-500 text-white font-mono text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-xs"
             >
               {unreadCount > 9 ? '৯+' : unreadCount}
             </motion.span>
