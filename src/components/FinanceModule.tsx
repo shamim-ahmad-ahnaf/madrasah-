@@ -13,6 +13,7 @@ interface FinanceModuleProps {
   showAddPaymentDirectly?: boolean | string;
   onClearAddPaymentDirectly?: () => void;
   teachers?: Teacher[];
+  highlightPaymentId?: string | null;
 }
 
 export default function FinanceModule({
@@ -25,7 +26,8 @@ export default function FinanceModule({
   madrasahSlogan,
   showAddPaymentDirectly,
   onClearAddPaymentDirectly,
-  teachers
+  teachers,
+  highlightPaymentId
 }: FinanceModuleProps) {
   const [subTab, setSubTab] = useState<'fees' | 'expenses'>('fees');
   const [searchTerm, setSearchTerm] = useState('');
@@ -148,6 +150,17 @@ export default function FinanceModule({
       openAddModal(typeof showAddPaymentDirectly === 'string' ? showAddPaymentDirectly : undefined);
     }
   }, [showAddPaymentDirectly]);
+
+  // Auto-open highlighted receipt
+  React.useEffect(() => {
+    if (highlightPaymentId) {
+      const found = payments.find(p => p.id === highlightPaymentId);
+      if (found) {
+        setSubTab('fees');
+        setActiveReceipt(found);
+      }
+    }
+  }, [highlightPaymentId, payments]);
 
   const openAddModal = (pushedStudentId?: string) => {
     let selectedStudent = students[0];

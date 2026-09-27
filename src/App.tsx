@@ -130,6 +130,12 @@ export default function App() {
   const [triggerStudentModal, setTriggerStudentModal] = useState(false);
   const [triggerPaymentModal, setTriggerPaymentModal] = useState<boolean | string>(false);
 
+  // Direct highlight inspection states (when clicking any notification from other devices)
+  const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
+  const [highlightTeacherId, setHighlightTeacherId] = useState<string | null>(null);
+  const [highlightPaymentId, setHighlightPaymentId] = useState<string | null>(null);
+  const [highlightNoticeId, setHighlightNoticeId] = useState<string | null>(null);
+
   // Core Data States
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -542,7 +548,10 @@ export default function App() {
           title: 'নতুন শিক্ষার্থী ভর্তি সম্পন্ন 🎓',
           message: `🔐 [${deviceName}] হতে "${newStudent.name}" (রোল: ${newStudent.roll}, শ্রেণী: ${newStudent.gradeClass}) ভর্তি অনুমোদন ও ডাটাবেজে যুক্ত করা হয়েছে।`,
           module: 'student',
-          type: 'create'
+          type: 'create',
+          targetTab: 'students',
+          targetId: newStudent.id,
+          data: newStudent
         });
       }
     );
@@ -561,7 +570,10 @@ export default function App() {
           title: 'শিক্ষার্থী তথ্য সংশোধিত 📝',
           message: `🔐 [${deviceName}] হতে শিক্ষার্থী "${updatedStudent.name}" এর তথ্য পরিবর্তন অনুমোদিত হয়েছে।`,
           module: 'student',
-          type: 'update'
+          type: 'update',
+          targetTab: 'students',
+          targetId: updatedStudent.id,
+          data: updatedStudent
         });
       }
     );
@@ -581,7 +593,8 @@ export default function App() {
           title: 'শিক্ষার্থী রেকর্ড অপসারিত 🗑️',
           message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে "${studentToDelete?.name || 'শিক্ষার্থী'}" এর রেকর্ড তালিকা হতে মুছে ফেলা হয়েছে।`,
           module: 'student',
-          type: 'delete'
+          type: 'delete',
+          targetTab: 'students'
         });
       },
       'মুছে ফেলা নিশ্চিত করুন'
@@ -606,7 +619,10 @@ export default function App() {
           title: 'নতুন শিক্ষক যুক্ত হয়েছেন 👨‍🏫',
           message: `🔐 [${deviceName}] হতে উস্তাদ "${newTeacher.name}" (${newTeacher.designation}) এর নিয়োগ অনুমোদন করা হয়েছে।`,
           module: 'teacher',
-          type: 'create'
+          type: 'create',
+          targetTab: 'teachers',
+          targetId: newTeacher.id,
+          data: newTeacher
         });
       }
     );
@@ -625,7 +641,10 @@ export default function App() {
           title: 'শিক্ষক তথ্য হালনাগাদ 📝',
           message: `🔐 [${deviceName}] হতে উস্তাদ "${updatedTeacher.name}" এর তথ্য পরিবর্তন অনুমোদিত হয়েছে।`,
           module: 'teacher',
-          type: 'update'
+          type: 'update',
+          targetTab: 'teachers',
+          targetId: updatedTeacher.id,
+          data: updatedTeacher
         });
       }
     );
@@ -645,7 +664,8 @@ export default function App() {
           title: 'শিক্ষক রেকর্ড অপসারিত 🗑️',
           message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে উস্তাদ "${teacherToDelete?.name || 'শিক্ষক'}" এর রেকর্ড মুছে ফেলা হয়েছে।`,
           module: 'teacher',
-          type: 'delete'
+          type: 'delete',
+          targetTab: 'teachers'
         });
       },
       'মুছে ফেলা নিশ্চিত করুন'
@@ -812,7 +832,10 @@ export default function App() {
           title: 'নতুন ফি আদায় সম্পন্ন 💵',
           message: `🔐 [${deviceName}] হতে ${paymentData.studentName} (${paymentData.gradeClass}) এর ${paymentData.payingMonth} মাসের ৳${paymentData.amount} টাকা ফি আদায় অনুমোদন হয়েছে।`,
           module: 'finance',
-          type: 'create'
+          type: 'create',
+          targetTab: 'finance',
+          targetId: newPayment.id,
+          data: newPayment
         });
 
         // Trigger SMS Receipt
@@ -836,7 +859,9 @@ export default function App() {
           title: 'পেমেন্ট রশিদ এসএমএস',
           message: `${paymentData.studentName} এর ফি জমার রশিদ প্রস্তুত হয়েছে।`,
           module: 'finance',
-          type: 'info'
+          type: 'info',
+          targetTab: 'finance',
+          targetId: newPayment.id
         });
       }
     );
@@ -856,7 +881,8 @@ export default function App() {
           title: 'ফি রসিদ মুছে ফেলা হয়েছে 🗑️',
           message: `🔐 [${deviceName}] এ মালিকের পাসওয়ার্ড অনুমোদন সাপেক্ষে ${paymentToDelete?.studentName || ''} এর ৳${paymentToDelete?.amount || 0} টাকার ফি রসিদ অপসারিত হয়েছে।`,
           module: 'finance',
-          type: 'delete'
+          type: 'delete',
+          targetTab: 'finance'
         });
       },
       'মুছে ফেলা নিশ্চিত করুন'
@@ -944,7 +970,10 @@ export default function App() {
           title: 'নতুন নোটিশ প্রকাশিত 📢',
           message: `🔐 [${deviceName}] হতে বিজ্ঞপ্তি: "${newNotice.title}" সকল ডিভাইসে প্রকাশিত হয়েছে।`,
           module: 'notice',
-          type: 'create'
+          type: 'create',
+          targetTab: 'notices',
+          targetId: newNotice.id,
+          data: newNotice
         });
       }
     );
@@ -963,7 +992,10 @@ export default function App() {
           title: 'নোটিশ সংশোধিত হয়েছে 📢',
           message: `🔐 [${deviceName}] হতে বিজ্ঞপ্তি "${updatedNotice.title}" আপডেট করা হয়েছে।`,
           module: 'notice',
-          type: 'update'
+          type: 'update',
+          targetTab: 'notices',
+          targetId: updatedNotice.id,
+          data: updatedNotice
         });
       }
     );
@@ -982,7 +1014,8 @@ export default function App() {
           title: 'নোটিশ অপসারিত 🗑️',
           message: `🔐 [${deviceName}] এ মালিক পাসওয়ার্ড দিয়ে একটি নোটিশ বোর্ড হতে মুছে ফেলা হয়েছে।`,
           module: 'notice',
-          type: 'delete'
+          type: 'delete',
+          targetTab: 'notices'
         });
       },
       'মুছে ফেলা নিশ্চিত করুন'
@@ -1079,6 +1112,64 @@ export default function App() {
     fetch('/api/notifications/clear', { method: 'POST' }).catch(() => {});
   };
 
+  // Click on any notification across devices to instantly navigate & view the target record
+  const handleNotificationClick = (notif: AppNotification) => {
+    // 1. Mark as read
+    setNotifications(prev => {
+      const updated = prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n);
+      try { localStorage.setItem('madrasah_notifications', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    // 2. Route to appropriate tab and open the relevant entity
+    const targetTab = notif.targetTab || (
+      notif.module === 'student' ? 'students' :
+      notif.module === 'teacher' ? 'teachers' :
+      notif.module === 'finance' ? 'finance' :
+      notif.module === 'attendance' ? 'attendance' :
+      notif.module === 'routine' ? 'routines' :
+      notif.module === 'notice' ? 'notices' :
+      notif.module === 'exam' ? 'exams' :
+      notif.module === 'library' ? 'library' :
+      notif.module === 'hostel' ? 'hostel' :
+      notif.module === 'donation' ? 'donations' :
+      notif.module === 'inventory' ? 'store_inventory' :
+      notif.module === 'settings' ? 'dashboard' : 'dashboard'
+    );
+
+    setActiveTab(targetTab);
+
+    // Reset previous highlights
+    setHighlightStudentId(null);
+    setHighlightTeacherId(null);
+    setHighlightPaymentId(null);
+    setHighlightNoticeId(null);
+
+    // If specific item ID was provided in notification
+    if (notif.targetId) {
+      if (notif.module === 'student') {
+        setHighlightStudentId(notif.targetId);
+      } else if (notif.module === 'teacher') {
+        setHighlightTeacherId(notif.targetId);
+      } else if (notif.module === 'finance') {
+        setHighlightPaymentId(notif.targetId);
+      } else if (notif.module === 'notice') {
+        setHighlightNoticeId(notif.targetId);
+      }
+    } else if (notif.data) {
+      // If notification has entity data attached
+      if (notif.module === 'student' && notif.data.id) {
+        setHighlightStudentId(notif.data.id);
+      } else if (notif.module === 'teacher' && notif.data.id) {
+        setHighlightTeacherId(notif.data.id);
+      } else if (notif.module === 'finance' && notif.data.id) {
+        setHighlightPaymentId(notif.data.id);
+      } else if (notif.module === 'notice' && notif.data.id) {
+        setHighlightNoticeId(notif.data.id);
+      }
+    }
+  };
+
   // Quick Navigator modal triggers
   const handleDashboardAddStudentTrigger = () => {
     setActiveTab('students');
@@ -1122,6 +1213,7 @@ export default function App() {
             onDeleteStudent={handleDeleteStudent}
             showAddModalDirectly={triggerStudentModal}
             onCloseModalDirectly={() => setTriggerStudentModal(false)}
+            highlightStudentId={highlightStudentId}
           />
         );
       case 'teachers':
@@ -1131,6 +1223,7 @@ export default function App() {
             onAddTeacher={handleAddTeacher}
             onUpdateTeacher={handleUpdateTeacher}
             onDeleteTeacher={handleDeleteTeacher}
+            highlightTeacherId={highlightTeacherId}
           />
         );
       case 'attendance':
@@ -1156,6 +1249,7 @@ export default function App() {
             madrasahSlogan={madrasahSlogan}
             showAddPaymentDirectly={triggerPaymentModal}
             onClearAddPaymentDirectly={() => setTriggerPaymentModal(false)}
+            highlightPaymentId={highlightPaymentId}
           />
         );
       case 'routines':
@@ -1176,6 +1270,7 @@ export default function App() {
             onUpdateNotice={handleUpdateNotice}
             onDeleteNotice={handleDeleteNotice}
             onSendNoticeSMS={handleSendNoticeSMS}
+            highlightNoticeId={highlightNoticeId}
           />
         );
       case 'sms':
@@ -1401,6 +1496,7 @@ export default function App() {
             notifications={notifications}
             onMarkAllAsRead={handleMarkAllNotificationsRead}
             onClearAll={handleClearAllNotifications}
+            onNotificationClick={handleNotificationClick}
             currentToast={currentToast}
             onDismissToast={() => setCurrentToast(null)}
           />
@@ -1596,6 +1692,7 @@ export default function App() {
                 notifications={notifications}
                 onMarkAllAsRead={handleMarkAllNotificationsRead}
                 onClearAll={handleClearAllNotifications}
+                onNotificationClick={handleNotificationClick}
                 currentToast={currentToast}
                 onDismissToast={() => setCurrentToast(null)}
               />

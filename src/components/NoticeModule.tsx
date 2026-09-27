@@ -8,6 +8,7 @@ interface NoticeModuleProps {
   onUpdateNotice: (notice: Notice) => void;
   onDeleteNotice: (id: string) => void;
   onSendNoticeSMS: (notice: Notice) => void;
+  highlightNoticeId?: string | null;
 }
 
 export default function NoticeModule({
@@ -15,7 +16,8 @@ export default function NoticeModule({
   onAddNotice,
   onUpdateNotice,
   onDeleteNotice,
-  onSendNoticeSMS
+  onSendNoticeSMS,
+  highlightNoticeId
 }: NoticeModuleProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [smsNoticeNotification, setSmsNoticeNotification] = useState<string | null>(null);
@@ -23,6 +25,17 @@ export default function NoticeModule({
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
+  const [viewingNotice, setViewingNotice] = useState<Notice | null>(null);
+
+  // Auto-open highlighted notice if provided
+  React.useEffect(() => {
+    if (highlightNoticeId) {
+      const found = notices.find(n => n.id === highlightNoticeId);
+      if (found) {
+        setViewingNotice(found);
+      }
+    }
+  }, [highlightNoticeId, notices]);
 
   // Form states
   const [formTitle, setFormTitle] = useState('');
@@ -137,14 +150,17 @@ export default function NoticeModule({
             return (
               <div 
                 key={notice.id} 
-                className={`rounded-2xl border p-6 flex flex-col justify-between transition-all ${
-                  isUrgent 
-                    ? 'bg-red-50/40 border-red-100/80 hover:bg-red-50/70' 
-                    : isExam
-                      ? 'bg-amber-50/45 border-amber-100/80 hover:bg-amber-50/70'
-                      : isHoliday
-                        ? 'bg-indigo-50/40 border-indigo-150 hover:bg-indigo-50/75'
-                        : 'bg-white border-slate-100 hover:border-emerald-100'
+                onClick={() => setViewingNotice(notice)}
+                className={`rounded-2xl border p-6 flex flex-col justify-between transition-all cursor-pointer ${
+                  highlightNoticeId === notice.id
+                    ? 'ring-2 ring-emerald-500 bg-emerald-50/50 shadow-md'
+                    : isUrgent 
+                      ? 'bg-red-50/40 border-red-100/80 hover:bg-red-50/70' 
+                      : isExam
+                        ? 'bg-amber-50/45 border-amber-100/80 hover:bg-amber-50/70'
+                        : isHoliday
+                          ? 'bg-indigo-50/40 border-indigo-150 hover:bg-indigo-50/75'
+                          : 'bg-white border-slate-100 hover:border-emerald-100 hover:shadow-xs'
                 }`}
               >
                 <div>
@@ -164,10 +180,13 @@ export default function NoticeModule({
                   </div>
 
                   <h3 className="text-sm font-extrabold text-slate-800 tracking-tight leading-snug">{notice.title}</h3>
-                  <p className="text-xs text-slate-600 font-normal mt-2 leading-relaxed whitespace-pre-line">{notice.content}</p>
+                  <p className="text-xs text-slate-600 font-normal mt-2 leading-relaxed whitespace-pre-line line-clamp-3">{notice.content}</p>
                 </div>
 
-                <div className="pt-4 mt-6 border-t border-slate-100/60 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div 
+                  className="pt-4 mt-6 border-t border-slate-100/60 flex items-center justify-between flex-wrap gap-2 text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button 
                     onClick={() => {
                       onSendNoticeSMS(notice);
@@ -180,6 +199,12 @@ export default function NoticeModule({
                     <span>অভিভাবকদের SMS পাঠান</span>
                   </button>
                   <div className="flex items-center space-x-1.5">
+                    <button 
+                      onClick={() => setViewingNotice(notice)}
+                      className="p-1 px-2.5 rounded-lg border border-slate-150 hover:bg-slate-100 text-slate-700 transition-colors text-xs flex items-center space-x-1 font-semibold"
+                    >
+                      <span>বিস্তারিত</span>
+                    </button>
                     <button 
                       onClick={() => openEditModal(notice)}
                       className="p-1 px-2.5 rounded-lg border border-slate-150 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-800 transition-colors text-xs flex items-center space-x-1"
@@ -300,6 +325,90 @@ export default function NoticeModule({
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Notice View Details */}
+      {viewingNotice && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-150 w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="bg-emerald-900 text-white p-5 flex items-start justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="p-1.5 bg-emerald-800 text-emerald-300 rounded-lg">
+                    <Megaphone size={16} />
+                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                    {viewingNotice.category} নোটিশ
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-base text-white mt-1 leading-snug">
+                  {viewingNotice.title}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setViewingNotice(null)}
+                className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-xl transition-colors cursor-pointer shrink-0 ml-3"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="flex items-center justify-between text-xs text-slate-500 pb-3 border-b border-slate-100">
+                <span className="flex items-center space-x-1.5 font-mono">
+                  <Calendar size={14} className="text-emerald-700" />
+                  <span>প্রকাশের তারিখ: <strong>{viewingNotice.date}</strong></span>
+                </span>
+                <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-bold text-slate-600">
+                  আইডি: {viewingNotice.id}
+                </span>
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                <p className="text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-line font-medium">
+                  {viewingNotice.content}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSendNoticeSMS(viewingNotice);
+                    setSmsNoticeNotification(`"${viewingNotice.title}" সফলভাবে এসএমএস আকারে পাঠানো হয়েছে!`);
+                    setTimeout(() => setSmsNoticeNotification(null), 5000);
+                  }}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <MessageSquare size={13} />
+                  <span>সকলকে SMS পাঠান</span>
+                </button>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const n = viewingNotice;
+                      setViewingNotice(null);
+                      openEditModal(n);
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Edit size={13} />
+                    <span>সম্পাদনা</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewingNotice(null)}
+                    className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors cursor-pointer shadow-xs"
+                  >
+                    ঠিক আছে
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

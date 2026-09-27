@@ -32,6 +32,7 @@ interface StudentModuleProps {
   onDeleteStudent: (id: string) => void;
   showAddModalDirectly?: boolean;
   onCloseModalDirectly?: () => void;
+  highlightStudentId?: string | null;
 }
 
 export default function StudentModule({
@@ -40,7 +41,8 @@ export default function StudentModule({
   onUpdateStudent,
   onDeleteStudent,
   showAddModalDirectly,
-  onCloseModalDirectly
+  onCloseModalDirectly,
+  highlightStudentId
 }: StudentModuleProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
@@ -50,6 +52,16 @@ export default function StudentModule({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
+
+  // Auto-open profile if highlightStudentId provided
+  React.useEffect(() => {
+    if (highlightStudentId) {
+      const found = students.find(s => s.id === highlightStudentId);
+      if (found) {
+        setSelectedProfileStudent(found);
+      }
+    }
+  }, [highlightStudentId, students]);
 
   // Dynamic profile settings from settings master
   const madrasahName = (localStorage.getItem('madrasah_profile_name') || 'মারকাযুল কুরআন মাদরাসা').replace('ঐতিহ্যবাহী', '').trim();

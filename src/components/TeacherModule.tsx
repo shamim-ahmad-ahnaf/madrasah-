@@ -8,18 +8,30 @@ interface TeacherModuleProps {
   onAddTeacher: (teacher: Omit<Teacher, 'id'>) => void;
   onUpdateTeacher: (teacher: Teacher) => void;
   onDeleteTeacher: (id: string) => void;
+  highlightTeacherId?: string | null;
 }
 
 export default function TeacherModule({
   teachers,
   onAddTeacher,
   onUpdateTeacher,
-  onDeleteTeacher
+  onDeleteTeacher,
+  highlightTeacherId
 }: TeacherModuleProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [selectedProfileTeacher, setSelectedProfileTeacher] = useState<Teacher | null>(null);
+
+  // Auto-open highlighted teacher profile if provided
+  React.useEffect(() => {
+    if (highlightTeacherId) {
+      const found = teachers.find(t => t.id === highlightTeacherId);
+      if (found) {
+        setSelectedProfileTeacher(found);
+      }
+    }
+  }, [highlightTeacherId, teachers]);
 
   // Bengali localization utilities
   const convertToBanglaNumber = (num: number | string): string => {

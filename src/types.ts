@@ -8,6 +8,9 @@ export interface AppNotification {
   isRead: boolean;
   senderDeviceId?: string;
   senderName?: string;
+  targetTab?: string;
+  targetId?: string;
+  data?: any;
 }
 
 export type MadrasahClass = 'নূরানী' | 'নাজেরা' | 'হিফজ' | 'কিতাব বিভাগ' | 'জেনারেল' | string;

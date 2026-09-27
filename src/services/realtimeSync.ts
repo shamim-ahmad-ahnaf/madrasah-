@@ -377,6 +377,9 @@ class RealtimeSyncManager {
       message: string;
       module: AppNotification['module'];
       type: AppNotification['type'];
+      targetTab?: string;
+      targetId?: string;
+      data?: any;
     }
   ): Promise<AppNotification> {
     const senderDeviceId = getDeviceId();
@@ -396,6 +399,9 @@ class RealtimeSyncManager {
       timestamp: new Date().toISOString(),
       senderDeviceId,
       senderName,
+      targetTab: action.targetTab,
+      targetId: action.targetId,
+      data: action.data !== undefined ? action.data : undefined,
       isRead: false
     };
 

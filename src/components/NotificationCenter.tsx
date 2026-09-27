@@ -166,7 +166,15 @@ export default function NotificationCenter({
               <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0 mt-0.5 border border-emerald-500/40">
                 {getModuleIcon(currentToast.module)}
               </div>
-              <div className="flex-1 min-w-0">
+              <div 
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => {
+                  if (onNotificationClick && currentToast) {
+                    onNotificationClick(currentToast);
+                    onDismissToast();
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
                     {getModuleNameBengali(currentToast.module)} নোটিফিকেশন
@@ -177,11 +185,16 @@ export default function NotificationCenter({
                 <p className="text-[11px] text-slate-200 mt-0.5 leading-snug line-clamp-2">
                   {currentToast.message}
                 </p>
-                {currentToast.senderName && (
-                  <span className="text-[9px] text-emerald-300/90 mt-1 inline-block bg-emerald-950/80 px-2 py-0.5 rounded-md font-mono border border-emerald-800/40">
-                    উৎস: {currentToast.senderName}
+                <div className="mt-1 flex items-center justify-between">
+                  {currentToast.senderName ? (
+                    <span className="text-[9px] text-emerald-300/90 inline-block bg-emerald-950/80 px-2 py-0.5 rounded-md font-mono border border-emerald-800/40">
+                      উৎস: {currentToast.senderName}
+                    </span>
+                  ) : <span></span>}
+                  <span className="text-[10px] text-emerald-400 font-bold underline hover:text-emerald-300">
+                    দেখুন &rarr;
                   </span>
-                )}
+                </div>
               </div>
               <button
                 onClick={onDismissToast}
@@ -341,7 +354,12 @@ export default function NotificationCenter({
                     filteredNotifications.map((notif, idx) => (
                       <div
                         key={`${notif.id}-${idx}`}
-                        onClick={() => onNotificationClick && onNotificationClick(notif)}
+                        onClick={() => {
+                          if (onNotificationClick) {
+                            onNotificationClick(notif);
+                          }
+                          setIsOpen(false);
+                        }}
                         className={`p-3 rounded-2xl transition-all cursor-pointer flex items-start space-x-3 ${
                           notif.isRead 
                             ? 'bg-white hover:bg-slate-50 opacity-85' 
@@ -370,9 +388,21 @@ export default function NotificationCenter({
                           </p>
 
                           {notif.senderName && (
-                            <div className="mt-1.5 flex items-center space-x-1 text-[9px] text-slate-400">
-                              <Smartphone size={10} />
-                              <span>উৎস: {notif.senderName}</span>
+                            <div className="mt-1.5 flex items-center justify-between text-[9px]">
+                              <span className="flex items-center space-x-1 text-slate-400">
+                                <Smartphone size={10} />
+                                <span>উৎস: {notif.senderName}</span>
+                              </span>
+                              <span className="text-emerald-700 font-bold hover:underline">
+                                দেখতে ক্লিক করুন &rarr;
+                              </span>
+                            </div>
+                          )}
+                          {!notif.senderName && (
+                            <div className="mt-1.5 flex justify-end text-[9px]">
+                              <span className="text-emerald-700 font-bold hover:underline">
+                                দেখতে ক্লিক করুন &rarr;
+                              </span>
                             </div>
                           )}
                         </div>
