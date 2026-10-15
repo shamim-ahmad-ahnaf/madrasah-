@@ -761,8 +761,18 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
 
        {/* ================= MODAL 1: ADD BOOK CATALOG ENTRY ================= */}
        {isBookModalOpen && (
-         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-3xl w-full max-w-md shadow-lg overflow-hidden animate-fade-in border border-slate-100 flex flex-col max-h-[90vh] text-left">
+         <div 
+           onClick={(e) => {
+             if (e.target === e.currentTarget) {
+               setIsBookModalOpen(false);
+             }
+           }}
+           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+         >
+           <div 
+             onClick={(e) => e.stopPropagation()}
+             className="bg-white rounded-3xl w-full max-w-md shadow-lg overflow-hidden animate-fade-in border border-slate-100 flex flex-col max-h-[90vh] text-left"
+           >
              <div className="bg-emerald-900 p-5 text-white flex items-center justify-between shrink-0">
                <div className="flex items-center space-x-2">
                  <BookOpen size={18} className="text-emerald-300" />
@@ -861,8 +871,18 @@ export default function LibraryModule({ students, teachers }: LibraryModuleProps
 
        {/* ================= MODAL 2: ISSUE BORROW BOOK ================= */}
        {isBorrowModalOpen && (
-         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-3xl w-full max-w-md shadow-lg overflow-hidden animate-fade-in border border-slate-100 flex flex-col max-h-[90vh] text-left">
+         <div 
+           onClick={(e) => {
+             if (e.target === e.currentTarget) {
+               setIsBorrowModalOpen(false);
+             }
+           }}
+           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+         >
+           <div 
+             onClick={(e) => e.stopPropagation()}
+             className="bg-white rounded-3xl w-full max-w-md shadow-lg overflow-hidden animate-fade-in border border-slate-100 flex flex-col max-h-[90vh] text-left"
+           >
              <div className="bg-emerald-900 p-5 text-white flex items-center justify-between shrink-0">
                <div className="flex items-center space-x-2">
                  <UserPlus size={18} className="text-emerald-300" />

@@ -1424,8 +1424,16 @@ export default function ExamModule({ students }: ExamModuleProps) {
       {/* Add / Edit Exam Result Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+          <div 
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setIsModalOpen(false);
+              }
+            }}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto"
+          >
             <motion.div 
+              onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -1659,8 +1667,16 @@ export default function ExamModule({ students }: ExamModuleProps) {
       {/* Printable Sanad / Marksheet View Modal */}
       <AnimatePresence>
         {isPrintModalOpen && selectedResultForPrint && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div 
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setIsPrintModalOpen(false);
+              }
+            }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto"
+          >
             <motion.div 
+              onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}

@@ -400,8 +400,18 @@ export default function StudentModule({
 
       {/* Modal - Add / Edit Student */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
+          >
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h3 className="font-bold font-sans">
                 {editingStudent ? 'শিক্ষার্থীর তথ্য পরিবর্তন করুন' : 'নতুন শিক্ষার্থী ভর্তির তথ্য ছক'}
@@ -581,8 +591,16 @@ export default function StudentModule({
 
       {/* Student Profile Showcase Modal */}
       {selectedProfileStudent && (
-        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedProfileStudent(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto"
+        >
           <motion.div 
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="bg-white rounded-3xl border border-slate-200 w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-800"

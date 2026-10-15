@@ -208,8 +208,18 @@ export default function RoutineModule({
 
       {/* Modal - Add Schedule Time Block */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
+          >
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h3 className="font-bold text-xs font-sans">
                 {editingSchedule ? 'শ্রেণী সময়সূচী সম্পাদনা ফরম' : 'নতুন ক্লাস সূচী নিবেশন'}

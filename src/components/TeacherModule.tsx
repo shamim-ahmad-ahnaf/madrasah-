@@ -277,8 +277,18 @@ export default function TeacherModule({
 
       {/* Modal Teacher Add / Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
+          >
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h3 className="font-bold font-sans">
                 {editingTeacher ? 'উস্তাদের তথ্য সংশোধন' : 'নতুন উস্তাদ/শিক্ষক ফরম'}
@@ -489,8 +499,16 @@ export default function TeacherModule({
       {/* Teacher Profile Card Modal */}
       <AnimatePresence>
         {selectedProfileTeacher && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex justify-center p-4 z-50 overflow-y-auto items-start">
+          <div 
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSelectedProfileTeacher(null);
+              }
+            }}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex justify-center p-4 z-50 overflow-y-auto items-start"
+          >
             <motion.div 
+              onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}

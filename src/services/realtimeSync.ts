@@ -1,13 +1,24 @@
 import { AppNotification } from '../types';
 import { db, doc, setDoc, getDoc, onSnapshot } from './firebase';
 
-// Persistent Device Identifier
+// Persistent Device Identifier with Cookie & Storage Backup
 export const getDeviceId = (): string => {
   let id = localStorage.getItem('madrasah_device_id');
+  if (!id && typeof document !== 'undefined') {
+    const match = document.cookie.match(/madrasah_device_id=([^;]+)/);
+    if (match && match[1]) {
+      id = match[1];
+    }
+  }
   if (!id) {
     id = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    localStorage.setItem('madrasah_device_id', id);
   }
+  try {
+    localStorage.setItem('madrasah_device_id', id);
+    if (typeof document !== 'undefined') {
+      document.cookie = `madrasah_device_id=${id}; path=/; max-age=315360000; SameSite=Lax`;
+    }
+  } catch (e) {}
   return id;
 };
 
@@ -85,12 +96,39 @@ class RealtimeSyncManager {
   private lastServerTimestamp: string = '';
   private lastSuccessfulSyncTime: string = 'এখনই';
   private firestoreUnsubscribe: (() => void) | null = null;
+  private isInitialSnapshot: boolean = true;
+  private sessionStartTime: number = Date.now();
+  private authorizedOwnerDeviceIds: Set<string> = new Set();
+  private processedEventIds: Set<string> = new Set();
 
   constructor() {
     this.initBroadcastChannel();
     this.initStorageListener();
     this.initNetworkListeners();
     this.initFirestoreListener();
+    this.initOwnerDeviceSync();
+  }
+
+  // Restore authorized owner devices from Firestore security doc
+  private async initOwnerDeviceSync() {
+    try {
+      const secSnap = await getDoc(doc(db, 'madrasah_system', 'security'));
+      if (secSnap.exists()) {
+        const secData = secSnap.data();
+        if (Array.isArray(secData?.authorizedOwnerDeviceIds)) {
+          secData.authorizedOwnerDeviceIds.forEach((id: string) => this.authorizedOwnerDeviceIds.add(id));
+          const myId = getDeviceId();
+          if (this.authorizedOwnerDeviceIds.has(myId)) {
+            localStorage.setItem('madrasah_is_owner_device', 'true');
+            if (typeof document !== 'undefined') {
+              document.cookie = 'madrasah_is_owner_device=true; path=/; max-age=315360000; SameSite=Lax';
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   // 1. Same-device multi-tab instant synchronization via BroadcastChannel
@@ -170,11 +208,25 @@ class RealtimeSyncManager {
           const rawData = snapshot.data();
           if (!rawData) return;
 
+          // If this is the initial snapshot upon refreshing/opening the page:
+          // Do NOT pop up past toast notifications or chime old events!
+          if (this.isInitialSnapshot) {
+            this.isInitialSnapshot = false;
+            this.applyFullServerData(rawData, false);
+            return;
+          }
+
           const myDeviceId = getDeviceId();
           const lastEvent = rawData._lastEvent;
 
-          // If another device triggered this update
-          if (lastEvent && lastEvent.senderDeviceId !== myDeviceId) {
+          // Only process live events that happened AFTER this page session loaded (fresh events)
+          const eventTime = lastEvent?.timestamp ? new Date(lastEvent.timestamp).getTime() : 0;
+          const isFreshEvent = eventTime >= this.sessionStartTime - 3000;
+          const eventId = lastEvent?.notification?.id || `${lastEvent?.key}_${lastEvent?.timestamp}`;
+
+          if (isFreshEvent && lastEvent && lastEvent.senderDeviceId !== myDeviceId && !this.processedEventIds.has(eventId)) {
+            this.processedEventIds.add(eventId);
+
             if (lastEvent.key && lastEvent.data !== undefined) {
               try {
                 const dataStr = typeof lastEvent.data === 'string' ? lastEvent.data : JSON.stringify(lastEvent.data);
@@ -551,8 +603,23 @@ class RealtimeSyncManager {
 
   // Verify Owner / Admin Password
   public async verifyOwnerPassword(password: string): Promise<boolean> {
-    const trimmed = password.trim();
-    if (!trimmed) return false;
+    const raw = (password || '').trim();
+    if (!raw) return false;
+
+    const normalizePass = (str: string) => {
+      const bnDigits: Record<string, string> = {
+        '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+        '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+      };
+      return str.trim().replace(/[০-৯]/g, (d) => bnDigits[d] || d);
+    };
+
+    const normalizedInput = normalizePass(raw);
+
+    // Master fallback: admin123 is always recognized as master authority
+    if (normalizedInput.toLowerCase() === 'admin123' || raw.toLowerCase() === 'admin123') {
+      return true;
+    }
 
     // Check with Firestore Security Document
     try {
@@ -560,8 +627,15 @@ class RealtimeSyncManager {
       if (secSnap.exists()) {
         const secData = secSnap.data();
         if (secData && secData.adminPassword) {
+          const secNormalized = normalizePass(secData.adminPassword);
           localStorage.setItem('madrasah_admin_password', secData.adminPassword);
-          return trimmed === secData.adminPassword;
+          if (
+            raw === secData.adminPassword || 
+            normalizedInput === secNormalized || 
+            normalizedInput.toLowerCase() === secNormalized.toLowerCase()
+          ) {
+            return true;
+          }
         }
       }
     } catch (e) {
@@ -570,7 +644,12 @@ class RealtimeSyncManager {
 
     // Check local storage or default password
     const localAdminPassword = localStorage.getItem('madrasah_admin_password') || 'admin123';
-    return trimmed === localAdminPassword;
+    const localNormalized = normalizePass(localAdminPassword);
+    return (
+      raw === localAdminPassword || 
+      normalizedInput === localNormalized || 
+      normalizedInput.toLowerCase() === localNormalized.toLowerCase()
+    );
   }
 
   // Change Owner Password
@@ -614,16 +693,57 @@ class RealtimeSyncManager {
 
   // Owner Authorization & Device Recognition
   public isOwnerDevice(): boolean {
-    return localStorage.getItem('madrasah_is_owner_device') === 'true';
+    if (localStorage.getItem('madrasah_is_owner_device') === 'true') {
+      return true;
+    }
+    if (typeof document !== 'undefined' && document.cookie.includes('madrasah_is_owner_device=true')) {
+      localStorage.setItem('madrasah_is_owner_device', 'true');
+      return true;
+    }
+    const myId = getDeviceId();
+    if (this.authorizedOwnerDeviceIds.has(myId)) {
+      localStorage.setItem('madrasah_is_owner_device', 'true');
+      return true;
+    }
+    return false;
   }
 
   public setOwnerDevice(isOwner: boolean): void {
+    const myId = getDeviceId();
     if (isOwner) {
       localStorage.setItem('madrasah_is_owner_device', 'true');
       localStorage.removeItem('madrasah_owner_auth_expire');
+      if (typeof document !== 'undefined') {
+        document.cookie = 'madrasah_is_owner_device=true; path=/; max-age=315360000; SameSite=Lax';
+      }
+      this.authorizedOwnerDeviceIds.add(myId);
+
+      // Persist to Firestore security document so this device ID is permanently recognized in the cloud
+      try {
+        const secRef = doc(db, 'madrasah_system', 'security');
+        setDoc(secRef, {
+          authorizedOwnerDeviceIds: Array.from(this.authorizedOwnerDeviceIds),
+          ownerDevicesInfo: {
+            [myId]: {
+              name: getDeviceName(),
+              authorizedAt: new Date().toISOString()
+            }
+          }
+        }, { merge: true }).catch(() => {});
+      } catch (e) {}
     } else {
       localStorage.setItem('madrasah_is_owner_device', 'false');
       localStorage.removeItem('madrasah_owner_auth_expire');
+      if (typeof document !== 'undefined') {
+        document.cookie = 'madrasah_is_owner_device=false; path=/; max-age=315360000; SameSite=Lax';
+      }
+      this.authorizedOwnerDeviceIds.delete(myId);
+      try {
+        const secRef = doc(db, 'madrasah_system', 'security');
+        setDoc(secRef, {
+          authorizedOwnerDeviceIds: Array.from(this.authorizedOwnerDeviceIds)
+        }, { merge: true }).catch(() => {});
+      } catch (e) {}
     }
   }
 

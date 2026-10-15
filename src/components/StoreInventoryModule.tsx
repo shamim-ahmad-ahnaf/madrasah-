@@ -905,8 +905,16 @@ export default function StoreInventoryModule() {
 
       {/* MODAL 1: Add New Catalog Item Parameters */}
       {isNewItemModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsNewItemModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100"
@@ -1011,8 +1019,16 @@ export default function StoreInventoryModule() {
 
       {/* MODAL 2: Stock In (ক্রয় / মজুদ বৃদ্ধি) */}
       {isStockInModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsStockInModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100"
@@ -1146,8 +1162,16 @@ export default function StoreInventoryModule() {
 
       {/* MODAL 3: Stock Out (বিতরণ / মালামাল খরচ) */}
       {isStockOutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsStockOutModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100"
@@ -1266,8 +1290,17 @@ export default function StoreInventoryModule() {
 
       {/* MODAL 4: Edit Item Technical properties */}
       {isEditItemModalOpen && editingItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEditItemModalOpen(false);
+              setEditingItem(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100"

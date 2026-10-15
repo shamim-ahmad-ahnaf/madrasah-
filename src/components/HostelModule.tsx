@@ -442,8 +442,16 @@ export default function HostelModule({ students }: HostelModuleProps) {
 
       {/* Allocation Modal */}
       {isAllocationModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAllocationModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-3xl border border-slate-200 w-full max-w-md shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"

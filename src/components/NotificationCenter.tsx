@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Bell, 
   X, 
@@ -119,6 +119,26 @@ export default function NotificationCenter({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close notification center when clicking anywhere outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [isOpen]);
 
   // Guarantee strict uniqueness of notifications by ID
   const uniqueNotifications = React.useMemo(() => {
@@ -209,7 +229,7 @@ export default function NotificationCenter({
       </div>
 
       {/* Bell Trigger Button in Header */}
-      <div className="relative font-sans">
+      <div ref={containerRef} className="relative font-sans">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className={`relative p-2 rounded-xl transition-all border cursor-pointer flex items-center justify-center ${
@@ -235,17 +255,18 @@ export default function NotificationCenter({
         <AnimatePresence>
           {isOpen && (
             <>
-              {/* Mobile Dimmed Backdrop */}
+              {/* Full Outside-Click Backdrop (Dimmed on mobile, subtle on desktop) */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 sm:hidden"
+                className="fixed inset-0 bg-slate-900/60 sm:bg-slate-900/25 backdrop-blur-2xs z-40"
               />
 
               {/* Modal Container: fixed full-width on mobile (left-2 right-2), anchored dropdown on desktop */}
               <motion.div
+                onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, scale: 0.95, y: -8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -8 }}

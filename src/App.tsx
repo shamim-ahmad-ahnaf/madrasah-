@@ -35,6 +35,7 @@ import StoreInventoryModule from './components/StoreInventoryModule';
 import NotificationCenter from './components/NotificationCenter';
 import OwnerAuthModal from './components/OwnerAuthModal';
 import { realtimeSync, playNotificationChime } from './services/realtimeSync';
+import { db, doc, setDoc } from './services/firebase';
 
 // Icon imports
 import { 
@@ -393,15 +394,41 @@ export default function App() {
         if (d.madrasah_profile_slogan) setMadrasahSlogan(d.madrasah_profile_slogan);
 
         if (Array.isArray(d.notifications) && d.notifications.length > 0) {
+          const clearedTime = parseInt(localStorage.getItem('madrasah_notifications_cleared_time') || '0', 10);
+          let readIds = new Set<string>();
+          try {
+            const savedReadIds = JSON.parse(localStorage.getItem('madrasah_read_notification_ids') || '[]');
+            readIds = new Set(savedReadIds);
+          } catch (e) {}
+
           setNotifications((prev) => {
             const map = new Map<string, AppNotification>();
-            d.notifications.forEach((n: AppNotification) => {
-              if (n && n.id) map.set(n.id, n);
-            });
             prev.forEach((n: AppNotification) => {
-              if (n && n.id && !map.has(n.id)) map.set(n.id, n);
+              if (n && n.id) {
+                map.set(n.id, n);
+                if (n.isRead) readIds.add(n.id);
+              }
             });
-            const updated = Array.from(map.values()).slice(0, 100);
+
+            d.notifications.forEach((n: AppNotification) => {
+              if (n && n.id) {
+                const notifTime = n.timestamp ? new Date(n.timestamp).getTime() : 0;
+                if (clearedTime > 0 && notifTime > 0 && notifTime <= clearedTime) {
+                  return;
+                }
+                const existing = map.get(n.id);
+                const isRead = readIds.has(n.id) || existing?.isRead || n.isRead || false;
+                map.set(n.id, {
+                  ...n,
+                  isRead
+                });
+              }
+            });
+
+            const updated = Array.from(map.values())
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              .slice(0, 100);
+
             try {
               localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
             } catch (e) {}
@@ -1103,12 +1130,35 @@ export default function App() {
   const handleMarkAllNotificationsRead = () => {
     const updated = notifications.map(n => ({ ...n, isRead: true }));
     setNotifications(updated);
-    localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
+    try {
+      localStorage.setItem('madrasah_notifications', JSON.stringify(updated));
+      const readIds = updated.map(n => n.id);
+      localStorage.setItem('madrasah_read_notification_ids', JSON.stringify(readIds));
+    } catch (e) {}
+
+    // Persist to Firestore as well so refreshing does not reactivate them
+    try {
+      setDoc(doc(db, 'madrasah_system', 'main_store'), {
+        notifications: updated
+      }, { merge: true }).catch(() => {});
+    } catch (e) {}
   };
 
   const handleClearAllNotifications = () => {
     setNotifications([]);
-    localStorage.setItem('madrasah_notifications', JSON.stringify([]));
+    try {
+      localStorage.setItem('madrasah_notifications', JSON.stringify([]));
+      localStorage.setItem('madrasah_notifications_cleared_time', Date.now().toString());
+      localStorage.removeItem('madrasah_read_notification_ids');
+    } catch (e) {}
+
+    // Clear on Firestore as well so reloading doesn't bring them back
+    try {
+      setDoc(doc(db, 'madrasah_system', 'main_store'), {
+        notifications: []
+      }, { merge: true }).catch(() => {});
+    } catch (e) {}
+
     fetch('/api/notifications/clear', { method: 'POST' }).catch(() => {});
   };
 
@@ -1748,8 +1798,21 @@ export default function App() {
 
       {/* Password Verification Modal for Master Settings */}
       {isPasswordPromptOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="password-prompt-modal">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden flex flex-col">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsPasswordPromptOpen(false);
+              setPasswordError('');
+              setPasswordInput('');
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" 
+          id="password-prompt-modal"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden flex flex-col"
+          >
             <div className="bg-emerald-900 text-white p-4 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
                 <Settings size={18} className="text-emerald-300" />
@@ -1823,8 +1886,19 @@ export default function App() {
 
       {/* Madrasah Settings Modal */}
       {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="madrasah-settings-modal">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsSettingsModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" 
+          id="madrasah-settings-modal"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]"
+          >
             <div className="bg-emerald-900 text-white p-4.5 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
                 <Settings size={18} className="text-emerald-300" />
@@ -2122,8 +2196,19 @@ export default function App() {
 
       {/* PWA Home Screen Shortcut Modal */}
       {isShortcutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" id="shortcut-helper-modal">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col md:max-h-[92vh] max-h-[95vh]">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsShortcutModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans" 
+          id="shortcut-helper-modal"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col md:max-h-[92vh] max-h-[95vh]"
+          >
             
             <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-teal-950 text-white p-4 flex items-center justify-between shrink-0 border-b border-emerald-800/40">
               <div className="flex items-center space-x-2.5">
@@ -2196,8 +2281,18 @@ export default function App() {
 
       {/* Multi-Device Live Sync & Device Settings Modal */}
       {isDeviceModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsDeviceModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]"
+          >
             
             <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-teal-950 text-white p-4.5 flex items-center justify-between shrink-0 border-b border-emerald-800/40">
               <div className="flex items-center space-x-2.5">

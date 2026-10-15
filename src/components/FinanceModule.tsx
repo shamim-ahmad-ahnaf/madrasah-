@@ -875,8 +875,18 @@ export default function FinanceModule({
 
       {/* Invoice receipt print Modal views */}
       {activeReceipt && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveReceipt(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100"
+          >
             {/* Header */}
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h4 className="font-bold text-xs font-sans">টাকা জমার রশিদ (Payment Slip Receipt)</h4>
@@ -985,8 +995,18 @@ export default function FinanceModule({
 
       {/* Modal - Add Payment Log */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100"
+          >
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h3 className="font-bold font-sans">নতুন রশিদ সংগ্রহ নিবেশন</h3>
               <button 
@@ -1162,8 +1182,19 @@ export default function FinanceModule({
 
       {/* 1. New Expense Record entry Popup Modal */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 animate-slide-up">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsExpenseModalOpen(false);
+              setEditExpenseId(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 animate-slide-up"
+          >
             
             {/* Header */}
             <div className="bg-indigo-800 text-white p-4 flex items-center justify-between shrink-0">
@@ -1414,8 +1445,18 @@ export default function FinanceModule({
 
       {/* 2. Expense Voucher details representations printable Modal */}
       {activeExpenseVoucher && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveExpenseVoucher(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in"
+          >
             {/* Header */}
             <div className="bg-indigo-800 text-white p-4 flex items-center justify-between shrink-0">
               <h4 className="font-semibold text-xs font-sans">ব্যয় বিবরণী ক্যাশ ভাউচার (Payment Cash Voucher)</h4>

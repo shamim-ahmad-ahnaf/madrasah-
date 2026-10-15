@@ -237,8 +237,18 @@ export default function NoticeModule({
 
       {/* Modal - Notice Add / Edit Form */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
+          >
             
             <div className="bg-emerald-800 text-white p-4 flex items-center justify-between shrink-0">
               <h3 className="font-bold text-xs font-sans">
@@ -331,8 +341,18 @@ export default function NoticeModule({
 
       {/* Modal - Notice View Details */}
       {viewingNotice && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-150 w-full max-w-lg overflow-hidden flex flex-col">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setViewingNotice(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in font-sans"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-150 w-full max-w-lg overflow-hidden flex flex-col"
+          >
             <div className="bg-emerald-900 text-white p-5 flex items-start justify-between">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
